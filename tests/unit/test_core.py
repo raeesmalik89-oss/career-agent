@@ -85,3 +85,8 @@ def test_agent_failure_is_recorded_not_raised(db):
     row = db.scalars(select(AgentRun).where(AgentRun.id == result.run_id)).one()
     assert row.status == RunStatus.failed and "boom" in row.errors[0]["message"]
     assert len(row.actions) == 1  # actions before the failure are kept for the audit trail
+
+
+@pytest.mark.parametrize("raw", ['"abcd-1234".', "  abcd-1234\n", "'abcd-1234'", "“abcd-1234”,", "abcd-1234"])
+def test_clean_secret(raw):
+    assert crypto.clean_secret(raw) == "abcd-1234"

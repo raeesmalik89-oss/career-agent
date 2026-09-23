@@ -46,3 +46,8 @@ def decrypt(blob: bytes, associated_data: bytes = b"") -> str:
 
 def generate_master_key() -> str:
     return base64.urlsafe_b64encode(os.urandom(32)).decode()
+
+
+def clean_secret(value: str) -> str:
+    """Remove what people copy by accident around a key: whitespace, quotes, trailing punctuation."""
+    return value.strip().strip("\"'`“”‘’").rstrip(".,;:").strip().strip("\"'`“”")

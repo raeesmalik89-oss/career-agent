@@ -195,7 +195,7 @@ def set_secret(email: str, name: str) -> None:
 
     if name not in SECRET_NAMES:
         sys.exit(f"name must be one of {sorted(SECRET_NAMES)}")
-    value = getpass.getpass(f"{name} (input hidden): ").strip()
+    value = crypto.clean_secret(getpass.getpass(f"{name} (input hidden): "))
     if len(value) < 4:
         sys.exit("value too short")
     with get_sessionmaker()() as db:

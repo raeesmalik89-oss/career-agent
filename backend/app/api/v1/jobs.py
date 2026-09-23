@@ -230,7 +230,7 @@ def put_secret(
     row = db.scalars(select(Secret).where(Secret.user_id == user.id, Secret.name == body.name)).first()
     from app.config import get_settings
 
-    blob = crypto.encrypt(body.value, body.name.encode())
+    blob = crypto.encrypt(crypto.clean_secret(body.value), body.name.encode())
     if row is None:
         db.add(Secret(user_id=user.id, name=body.name, ciphertext=blob, key_version=get_settings().master_key_version))
     else:

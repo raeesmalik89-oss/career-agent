@@ -57,7 +57,7 @@ def build_queries(families: list[str]) -> list[str]:
 
 def _secret(db, user_id: uuid.UUID, name: str) -> str | None:
     row = db.scalars(select(Secret).where(Secret.user_id == user_id, Secret.name == name)).first()
-    return crypto.decrypt(row.ciphertext, name.encode()) if row else None
+    return crypto.clean_secret(crypto.decrypt(row.ciphertext, name.encode())) if row else None
 
 
 def make_connector(src: JobSource, http: HttpClient, db, user_id: uuid.UUID) -> Connector:
