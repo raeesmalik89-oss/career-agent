@@ -14,8 +14,8 @@ The design is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 | 2 | Resume Analyzer | ✅ done |
 | 3 | GitHub Analyzer | ✅ done |
 | 4 | Job Search Engine | ✅ done |
-| 5 | Matching Engine | next |
-| 6 | Dashboard | |
+| 5 | Matching Engine | ✅ done |
+| 6 | Dashboard | next |
 | 7 | Application Engine | |
 | 8 | Interview Coach | |
 | 9 | Skill Gap + Concept Maps | |
@@ -60,6 +60,19 @@ The design is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 - **Daily minimum**: if fewer than `daily_min_jobs_scanned` postings are found, the scan widens its queries and reports any shortfall. Scores are never inflated to compensate.
 - 30+ mock jobs (`tests/fixtures/jobs.py`) and a fake HTTP client, so the tests never use the network.
 
+### What Milestone 5 contains
+- **Job Matcher Agent** (`agents/match_agent/`) runs at the end of every scan, and on demand with no network access (`match-jobs`, `POST /matches/run`).
+- **Estimated Resume-to-Job Fit Score (0-100)**, deterministic and explainable. It is always shown with its confidence and the disclaimer *"Measures overlap between your verified profile and the posting. It is not a probability of being hired."*
+- **Seven weighted components** (weights in Settings, default 30/20/15/10/10/10/5):
+  - **Skills**: per skill, 1.0 = used in resume experience/projects *and* GitHub; 0.8 = resume use only; 0.7 = GitHub only; 0.5 = listed only or an adjacent skill; 0 = "Evidence not found.". Required skills count 75% and preferred 25%.
+  - **Experience**: dated technology experience only, with overlaps counted once. Training programmes are counted but flagged as a risk.
+  - **Project/GitHub evidence**: which skills are backed by your repos, plus recent activity and tests/CI.
+  - **Education and certifications**: a Level 6 diploma is described as a diploma, never as a degree, and a degree in an unrelated field is reported as such.
+  - **Role family and seniority**; **location and remote** (Pakistan eligibility with its quoted evidence); **domain** (e.g. healthcare).
+- **Knockouts hide a job and say why**: not open to Pakistan; on-site/hybrid outside your cities; security clearance (a "no clearance required" posting is not a knockout); seniority 2 or more levels above your verified level; experience required more than 2x your verified years. The last two limits are configurable in the Settings policy.
+- **Never re-shown**: there is one match per job *version*. Re-scoring after a profile or Settings change updates that match in place and keeps its "seen" state. Only a material change to the posting creates a new, unseen match.
+- **Stored per match**: component points and explanations, evidence (fact IDs and GitHub repos), missing and partial skills, risks, knockouts and a recommendation.
+
 ## API (so far)
 
 | Method | Path | Role |
@@ -78,6 +91,8 @@ The design is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 | GET | `/api/v1/github/repos` · `/api/v1/github/intelligence` | any |
 | POST | `/api/v1/jobs/scan` · `/api/v1/jobs/manual` | owner |
 | GET | `/api/v1/jobs` (filters: family, remote, pk, q, since) · `/api/v1/jobs/{id}` · `/api/v1/jobs-stats` | any |
+| GET | `/api/v1/matches` (min_score, new_only, include_hidden, include_dismissed) · `/api/v1/jobs/{id}/match` | any |
+| POST | `/api/v1/matches/run` · `/api/v1/matches/seen` · `/api/v1/matches/{id}/dismiss` | owner |
 | PUT | `/api/v1/secrets` (stored encrypted, never returned) | owner |
 | GET | `/api/v1/audit-logs` · `/api/v1/agent-runs` | owner |
 | GET | `/healthz` · `/readyz` · `/metrics` · `/docs` (dev only) | – |
@@ -100,7 +115,8 @@ uv run python -m app.cli import-profile --email you@example.com main_cv.pdf othe
 uv run python -m app.cli report --email you@example.com --out storage/resume_report.json
 uv run python -m app.cli github-sync --email you@example.com --username your-github --out storage/github_report.json
 uv run python -m app.cli sources --enable remoteok remotive himalayas weworkremotely arbeitnow greenhouse ashby     --companies greenhouse=gitlab,canonical,grafanalabs,cloudflare,elastic,mongodb,datadog ashby=supabase,posthog,replit,render
-uv run python -m app.cli scan-jobs --email you@example.com
+uv run python -m app.cli scan-jobs --email you@example.com           # also scores the jobs
+uv run python -m app.cli match-jobs --email you@example.com --out storage/matches.json   # re-score only, no network
 ```
 The first file you import is treated as your primary resume. `storage/` (database, copies of your documents, reports) is git-ignored.
 

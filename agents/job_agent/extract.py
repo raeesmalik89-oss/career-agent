@@ -85,6 +85,26 @@ VISA_NO = re.compile(
     r"(to )?(provide |offer )?(visa )?sponsor)",
     re.I,
 )
+CLEARANCE_RX = re.compile(
+    r"\b(?:(?:active|current) )?(?:security clearance|clearance required|ts/sci)\b[^.\n]{0,60}", re.I
+)
+NEGATION_RX = re.compile(r"\b(no|not|without|never)\b|n't\b", re.I)
+
+
+def _first_unnegated(rx: re.Pattern, text: str) -> str | None:
+    """First match not negated nearby ('No security clearance required', 'you do not need to be located in')."""
+    for m in rx.finditer(text):
+        before = text[max(0, m.start() - 30) : m.start()].split(".")[-1]
+        if not NEGATION_RX.search(before) and not NEGATION_RX.search(text[m.start() : m.start() + 20]):
+            return m.group(0).strip()
+    return None
+
+
+def clearance_quote(text: str) -> str | None:
+    """The clearance requirement as quoted, or None."""
+    return _first_unnegated(CLEARANCE_RX, text)
+
+
 DEGREE_RX = re.compile(r"[^.\n]*\b(bachelor'?s?|master'?s?|b\.?s\.?c?|m\.?s\.?c?|phd|degree)\b[^.\n]*", re.I)
 PK_TZ = 5
 
@@ -241,8 +261,7 @@ def pk_eligibility(p: JobPosting, remote: str) -> tuple[str, str]:
     place = PK_PLACES.search(loc_blob)
     if remote == "remote" and place:
         return "eligible", f"remote role based in Pakistan: '{place.group(0)}' (location: {p.location})"
-    m = RESTRICTION_RX.search(p.description)
-    restriction_quote = m.group(0).strip() if m else None
+    restriction_quote = _first_unnegated(RESTRICTION_RX, p.description)
     if restriction_quote and not re.search(r"pakistan", restriction_quote, re.I):
         return "ineligible", f'description: "{restriction_quote}"'
     if p.location_restrictions:
@@ -333,5 +352,5 @@ def analyze(p: JobPosting, taxonomy: Taxonomy) -> JobAnalysis:
         visa=visa,
         education=edu.group(0).strip()[:300] if edu else None,
         skills=extract_skills(p, taxonomy),
-        clearance_required=bool(re.search(r"security clearance|clearance required|\bts/sci\b", p.description, re.I)),
+        clearance_required=clearance_quote(p.description) is not None,
     )

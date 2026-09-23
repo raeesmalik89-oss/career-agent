@@ -3,6 +3,9 @@
 python -m app.cli gen-keys                         print fresh JWT_SECRET / MASTER_KEY values
 python -m app.cli seed                             seed the job-source registry (idempotent)
 python -m app.cli create-owner --email E --name N  create the owner account (password prompted)
+python -m app.cli scan-jobs --email E              discover, extract, dedup and score jobs
+python -m app.cli reanalyze-jobs                   re-run extraction on stored postings (no network)
+python -m app.cli match-jobs --email E [--out F]   re-score current jobs against your profile (no network)
 """
 
 import argparse
@@ -200,6 +203,65 @@ def reanalyze_jobs() -> None:
     print(f"re-analysed {counts['jobs']} jobs; {counts['updated']} changed classification")
 
 
+def match_jobs(email: str, out: str | None, show_hidden: bool) -> None:
+    import json
+
+    from sqlalchemy import select as sel
+
+    from agents.match_agent.agent import run_matching
+    from agents.match_agent.scoring import DISCLAIMER
+    from app.db.models import Job, JobMatch
+
+    with get_sessionmaker()() as db:
+        user = _user(db, email)
+        result = run_matching(db, user.id)
+        audit.record(
+            db,
+            action="matches.run",
+            actor=Actor.user,
+            actor_detail="cli",
+            user_id=user.id,
+            entity_type="agent_runs",
+            entity_id=result.run_id,
+            after=result.output.get("counts"),
+        )
+        db.commit()
+        rows = db.execute(
+            sel(JobMatch, Job)
+            .join(Job, Job.id == JobMatch.job_id)
+            .where(JobMatch.user_id == user.id, JobMatch.job_content_version == Job.content_version)
+            .order_by(JobMatch.estimated_fit_score.desc())
+        ).all()
+        threshold = result.output.get("threshold", 80)
+        shown = [(m, j) for m, j in rows if show_hidden or (not m.knockouts and m.estimated_fit_score >= threshold)]
+        for m, j in shown:
+            flag = "NEW " if m.shown_to_user_at is None else "    "
+            ko = f"  [hidden: {m.knockouts[0]['code']}]" if m.knockouts else ""
+            score = f"{float(m.estimated_fit_score):5.1f} {m.score_confidence.value:<6}"
+            print(f"{flag}{score} {j.title[:55]:<55} | {j.company[:28]}{ko}")
+        if out:
+            data = [
+                {"job": {"title": j.title, "company": j.company, "location": j.location, "url": j.url},
+                 "label": m.breakdown.get("label"), "recommendation": m.recommendation,
+                 "components": m.breakdown.get("components"), "why_matched": m.why_matched,
+                 "why_not_matched": m.why_not_matched, "missing_skills": m.missing_skills,
+                 "partial_skills": m.partial_skills, "risks": m.risks, "knockouts": m.knockouts}
+                for m, j in shown
+            ]  # fmt: skip
+            with open(out, "w", encoding="utf-8") as fh:
+                fh.write(json.dumps({"disclaimer": DISCLAIMER, "matches": data}, indent=2, ensure_ascii=False))
+            print(f"details written to {out}")
+    counts = result.output.get("counts", {})
+    print(
+        f"scored {counts.get('scored', 0)} jobs: {counts.get('qualifying', 0)} at or above {threshold} "
+        f"({counts.get('new_qualifying', 0)} new), {counts.get('knocked_out', 0)} hidden by knockouts, "
+        f"{counts.get('below_threshold', 0)} below threshold"
+    )
+    print(DISCLAIMER)
+    for e in result.errors:
+        print(f"  ERROR {e.code}: {e.message}")
+
+
 def set_secret(email: str, name: str) -> None:
     from app.api.v1.jobs import SECRET_NAMES
     from app.config import get_settings
@@ -307,6 +369,10 @@ def main(argv: list[str] | None = None) -> None:
     sj.add_argument("--email", required=True)
     sj.add_argument("--source", action="append")
     sub.add_parser("reanalyze-jobs")
+    mj = sub.add_parser("match-jobs")
+    mj.add_argument("--email", required=True)
+    mj.add_argument("--out")
+    mj.add_argument("--show-hidden", action="store_true", help="also list knocked-out and below-threshold jobs")
     ss = sub.add_parser("set-secret")
     ss.add_argument("--email", required=True)
     ss.add_argument("--name", required=True)
@@ -331,6 +397,8 @@ def main(argv: list[str] | None = None) -> None:
         scan_jobs(args.email, args.source)
     elif args.cmd == "reanalyze-jobs":
         reanalyze_jobs()
+    elif args.cmd == "match-jobs":
+        match_jobs(args.email, args.out, args.show_hidden)
     elif args.cmd == "set-secret":
         set_secret(args.email, args.name)
     elif args.cmd == "report":

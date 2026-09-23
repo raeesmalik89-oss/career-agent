@@ -112,6 +112,11 @@ def test_remote_type(kw, expected):
             "must be located in",
         ),
         ({"remote_hint": "remote", "description": "Security clearance required."}, "ineligible", "clearance"),
+        (
+            {"remote_hint": "remote", "description": "No security clearance required. Work from anywhere."},
+            "eligible",
+            "anywhere",
+        ),
         ({"remote_hint": "remote", "description": "Hours overlap with UTC+3 to UTC+7."}, "eligible", "UTC+5"),
         ({"remote_hint": "remote", "raw": {"timezoneRestrictions": [4, 5, 6]}}, "eligible", "UTC+5"),
         ({"remote_hint": "remote", "raw": {"timezoneRestrictions": [-5, -4]}}, "ineligible", "excludes"),

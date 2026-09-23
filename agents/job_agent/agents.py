@@ -242,7 +242,9 @@ def run_job_scan(
     http: HttpClient | None = None,
     per_source_limit: int = 60,
 ) -> dict:
-    """morning_scan steps 1-3: discover -> store raw -> extract + dedup. Matching comes in Milestone 5."""
+    """morning_scan steps 1-4: discover -> store raw -> extract + dedup -> score against the profile."""
+    from agents.match_agent.agent import run_matching
+
     pipeline = uuid.uuid4()
     disc = JobDiscoveryAgent(http).run(
         DiscoveryInput(user_id=user_id, source_keys=source_keys, per_source_limit=per_source_limit),
@@ -253,11 +255,13 @@ def run_job_scan(
     ingest = JobIngestAgent().run(
         IngestInput(raw_ids=disc.output.get("raw_ids", [])), db, user_id=user_id, pipeline_run_id=pipeline
     )
+    match = run_matching(db, user_id, pipeline_run_id=pipeline)
     return {
         "pipeline_run_id": str(pipeline),
         "discovery": {k: v for k, v in disc.output.items() if k != "raw_ids"},
         "ingest": ingest.output,
-        "errors": [e.model_dump() for e in (*disc.errors, *ingest.errors)],
+        "matching": match.output,
+        "errors": [e.model_dump() for e in (*disc.errors, *ingest.errors, *match.errors)],
     }
 
 
