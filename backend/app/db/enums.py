@@ -16,6 +16,13 @@ class Confidence(StrEnum):
 class ResumeKind(StrEnum):
     source = "source"
     tailored = "tailored"
+    certificate = "certificate"
+
+
+class ReviewStatus(StrEnum):
+    pending = "pending"
+    verified = "verified"
+    rejected = "rejected"
 
 
 class FileFormat(StrEnum):

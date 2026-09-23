@@ -1,0 +1,196 @@
+# Canonical skill taxonomy.
+#   key:        canonical id (stored in skills.canonical_name)
+#   name:       display name (also matched)
+#   category:   cloud | devops | programming | ai_ml | aiops | security | healthcare | data | other
+#   aliases:    extra spellings matched case-insensitively on word boundaries
+#   ambiguous:  true -> matched case-sensitively and only inside a skills list (e.g. "Go", "MCP")
+#   implies:    using this skill is evidence of using these too (recorded as "implied by")
+#   adjacent:   related skills that earn partial credit in matching (never claimed as the skill itself)
+#   outdated:   reason string when the skill is legacy/declining (advice only, never removed from facts)
+
+# ---------------- cloud ----------------
+- {key: aws, name: AWS, category: cloud, aliases: [amazon web services], adjacent: [azure, gcp]}
+- {key: azure, name: Azure, category: cloud, aliases: [microsoft azure], adjacent: [aws, gcp]}
+- {key: gcp, name: GCP, category: cloud, aliases: [google cloud, google cloud platform], adjacent: [aws, azure]}
+- {key: aws_ec2, name: EC2, category: cloud, aliases: [aws ec2, amazon ec2], implies: [aws]}
+- {key: aws_s3, name: S3, category: cloud, aliases: [aws s3, amazon s3], implies: [aws]}
+- {key: aws_lambda, name: Lambda, category: cloud, aliases: [aws lambda], implies: [aws], adjacent: [serverless]}
+- {key: aws_rds, name: RDS, category: cloud, aliases: [aws rds, amazon rds], implies: [aws]}
+- {key: aws_vpc, name: VPC, category: cloud, aliases: [aws vpc], implies: [aws]}
+- {key: aws_sns, name: SNS, category: cloud, aliases: [aws sns], implies: [aws]}
+- {key: aws_ecs, name: ECS, category: cloud, aliases: [aws ecs, fargate], implies: [aws], adjacent: [kubernetes]}
+- {key: eks, name: EKS, category: cloud, aliases: [amazon eks, aws eks], implies: [aws, kubernetes]}
+- {key: aks, name: AKS, category: cloud, aliases: [azure kubernetes service], implies: [azure, kubernetes]}
+- {key: gke, name: GKE, category: cloud, aliases: [google kubernetes engine], implies: [gcp, kubernetes]}
+- {key: azure_monitor, name: Azure Monitor, category: cloud, implies: [azure], adjacent: [cloudwatch]}
+- {key: azure_traffic_manager, name: Traffic Manager, category: cloud, aliases: [azure traffic manager], implies: [azure]}
+- {key: azure_app_gateway, name: Application Gateway, category: cloud, aliases: [azure application gateway], implies: [azure]}
+- {key: cloudformation, name: CloudFormation, category: cloud, aliases: [aws cloudformation], implies: [aws], adjacent: [terraform]}
+- {key: serverless, name: Serverless, category: cloud, adjacent: [aws_lambda]}
+- {key: auto_scaling, name: Auto Scaling, category: cloud, aliases: [autoscaling, auto-scaling, hpa]}
+- {key: load_balancing, name: Load Balancing, category: cloud, aliases: [load balancer, load balancers, alb, elb]}
+
+# ---------------- devops ----------------
+- {key: docker, name: Docker, category: devops, aliases: [containerisation, containerization, containerised, containerized, dockerfile], adjacent: [podman]}
+- {key: docker_compose, name: Docker Compose, category: devops, aliases: [docker-compose, compose file], implies: [docker]}
+- {key: docker_swarm, name: Docker Swarm, category: devops, implies: [docker], adjacent: [kubernetes], outdated: "Declining in job demand versus Kubernetes; keep it, but list it after Kubernetes."}
+- {key: kubernetes, name: Kubernetes, category: devops, aliases: [k8s], adjacent: [openshift, docker_swarm, aws_ecs]}
+- {key: helm, name: Helm, category: devops, aliases: [helm charts, helm chart], implies: [kubernetes], adjacent: [kustomize]}
+- {key: kustomize, name: Kustomize, category: devops, implies: [kubernetes], adjacent: [helm]}
+- {key: openshift, name: OpenShift, category: devops, implies: [kubernetes]}
+- {key: terraform, name: Terraform, category: devops, aliases: [hcl, terraform modules], adjacent: [pulumi, cloudformation]}
+- {key: pulumi, name: Pulumi, category: devops, adjacent: [terraform]}
+- {key: ansible, name: Ansible, category: devops, aliases: [ansible playbooks, playbooks]}
+- {key: packer, name: Packer, category: devops, aliases: [hashicorp packer]}
+- {key: iac, name: Infrastructure as Code, category: devops, aliases: [iac, infrastructure-as-code]}
+- {key: ci_cd, name: CI/CD, category: devops, aliases: [cicd, ci-cd, continuous integration, continuous delivery, continuous deployment]}
+- {key: github_actions, name: GitHub Actions, category: devops, implies: [ci_cd], adjacent: [gitlab_ci, jenkins, azure_pipelines]}
+- {key: gitlab_ci, name: GitLab CI, category: devops, aliases: [gitlab ci/cd, gitlab-ci], implies: [ci_cd], adjacent: [github_actions, jenkins]}
+- {key: jenkins, name: Jenkins, category: devops, implies: [ci_cd], adjacent: [github_actions, gitlab_ci]}
+- {key: azure_pipelines, name: Azure DevOps, category: devops, aliases: [azure devops pipelines, azure pipelines], implies: [ci_cd, azure], adjacent: [github_actions]}
+- {key: argocd, name: ArgoCD, category: devops, aliases: [argo cd, argo-cd], implies: [gitops], adjacent: [flux]}
+- {key: flux, name: Flux, category: devops, aliases: [fluxcd], implies: [gitops], adjacent: [argocd], ambiguous: true}
+- {key: gitops, name: GitOps, category: devops}
+- {key: git, name: Git, category: devops, aliases: [github, gitlab, version control]}
+- {key: linux, name: Linux, category: devops, aliases: [ubuntu, rhel, centos, debian]}
+- {key: nginx, name: Nginx, category: devops}
+- {key: service_mesh, name: Service Mesh, category: devops, adjacent: [istio]}
+- {key: istio, name: Istio, category: devops, implies: [service_mesh]}
+- {key: podman, name: Podman, category: devops, adjacent: [docker]}
+- {key: devops, name: DevOps, category: devops}
+- {key: platform_engineering, name: Platform Engineering, category: devops, aliases: [internal developer platform]}
+
+# ---------------- programming ----------------
+- {key: python, name: Python, category: programming}
+- {key: bash, name: Bash, category: programming, aliases: [shell scripting, shell scripts, bash scripting]}
+- {key: powershell, name: PowerShell, category: programming}
+- {key: javascript, name: JavaScript, category: programming, aliases: [js], adjacent: [typescript]}
+- {key: typescript, name: TypeScript, category: programming, adjacent: [javascript]}
+- {key: go, name: Go, category: programming, aliases: [golang], ambiguous: true}
+- {key: java, name: Java, category: programming}
+- {key: sql, name: SQL, category: programming}
+- {key: yaml, name: YAML, category: programming}
+- {key: json, name: JSON, category: programming}
+- {key: fastapi, name: FastAPI, category: programming, implies: [python, rest_api], adjacent: [flask, django]}
+- {key: flask, name: Flask, category: programming, implies: [python], adjacent: [fastapi, django]}
+- {key: django, name: Django, category: programming, implies: [python], adjacent: [flask, fastapi]}
+- {key: streamlit, name: Streamlit, category: programming, implies: [python]}
+- {key: rest_api, name: REST APIs, category: programming, aliases: [rest api, restful]}
+- {key: react, name: React, category: programming, aliases: [react.js, reactjs], implies: [javascript]}
+- {key: nodejs, name: Node.js, category: programming, aliases: [nodejs, node js], implies: [javascript]}
+- {key: selenium, name: Selenium, category: other}
+- {key: pytest, name: pytest, category: programming, implies: [python]}
+
+# ---------------- ai / ml ----------------
+- {key: machine_learning, name: Machine Learning, category: ai_ml, aliases: [machine-learning]}
+- {key: deep_learning, name: Deep Learning, category: ai_ml, implies: [machine_learning]}
+- {key: nlp, name: NLP, category: ai_ml, aliases: [natural language processing]}
+- {key: computer_vision, name: Computer Vision, category: ai_ml}
+- {key: scikit_learn, name: scikit-learn, category: ai_ml, aliases: [sklearn, scikit learn], implies: [machine_learning, python]}
+- {key: tensorflow, name: TensorFlow, category: ai_ml, aliases: [keras], implies: [deep_learning], adjacent: [pytorch]}
+- {key: pytorch, name: PyTorch, category: ai_ml, implies: [deep_learning], adjacent: [tensorflow]}
+- {key: pandas, name: pandas, category: ai_ml, implies: [python]}
+- {key: numpy, name: NumPy, category: ai_ml, implies: [python]}
+- {key: xgboost, name: XGBoost, category: ai_ml, implies: [machine_learning], adjacent: [ensembles]}
+- {key: isolation_forest, name: Isolation Forest, category: ai_ml, implies: [anomaly_detection, machine_learning]}
+- {key: ensembles, name: Ensemble Methods, category: ai_ml, aliases: [ensemble, bagging, boosting, bagging/boosting ensembles], implies: [machine_learning]}
+- {key: pca, name: PCA, category: ai_ml, aliases: [principal component analysis], implies: [machine_learning]}
+- {key: capsule_networks, name: Capsule Networks, category: ai_ml, implies: [deep_learning]}
+- {key: jupyter, name: Jupyter, category: ai_ml, aliases: [jupyter notebook, jupyter notebooks]}
+- {key: mlflow, name: MLflow, category: ai_ml, implies: [mlops]}
+- {key: kubeflow, name: Kubeflow, category: ai_ml, implies: [mlops, kubernetes]}
+- {key: mlops, name: MLOps, category: ai_ml, aliases: [ml ops, model deployment, model serving, automated retraining]}
+- {key: llm, name: LLMs, category: ai_ml, aliases: [llm, large language models, large language model, generative ai, genai]}
+- {key: rag, name: RAG, category: ai_ml, aliases: [retrieval-augmented generation, retrieval augmented generation], implies: [llm]}
+- {key: langchain, name: LangChain, category: ai_ml, implies: [llm], adjacent: [langgraph]}
+- {key: langgraph, name: LangGraph, category: ai_ml, implies: [llm, agentic_ai], adjacent: [langchain]}
+- {key: agentic_ai, name: Agentic AI, category: ai_ml, aliases: [ai agents, ai agent, agentic, multi-agent], implies: [llm]}
+- {key: mcp, name: MCP, category: ai_ml, aliases: [model context protocol], ambiguous: true}
+- {key: prompt_engineering, name: Prompt Engineering, category: ai_ml, implies: [llm]}
+- {key: vector_database, name: Vector Databases, category: ai_ml, aliases: [vector database, vector db, pinecone, weaviate, chroma, qdrant, faiss]}
+- {key: hugging_face, name: Hugging Face, category: ai_ml, aliases: [huggingface, transformers library]}
+- {key: ai_systems, name: AI Systems, category: ai_ml, aliases: [ai in production, ai/ml in production, ai systems]}
+
+# ---------------- aiops / observability ----------------
+- {key: monitoring, name: Monitoring, category: aiops}
+- {key: observability, name: Observability, category: aiops}
+- {key: aiops, name: AIOps, category: aiops, aliases: [ai operations, artificial intelligence operations]}
+- {key: prometheus, name: Prometheus, category: aiops, implies: [monitoring], adjacent: [datadog]}
+- {key: grafana, name: Grafana, category: aiops, implies: [observability]}
+- {key: alertmanager, name: Alertmanager, category: aiops, implies: [prometheus]}
+- {key: elk, name: ELK Stack, category: aiops, aliases: [elk, elasticsearch, logstash, kibana, elastic stack], implies: [logging], adjacent: [loki, splunk]}
+- {key: loki, name: Loki, category: aiops, aliases: [grafana loki], implies: [logging], adjacent: [elk]}
+- {key: splunk, name: Splunk, category: aiops, implies: [logging], adjacent: [elk]}
+- {key: logging, name: Logging, category: aiops, aliases: [centralised logging, centralized logging, log aggregation]}
+- {key: tracing, name: Distributed Tracing, category: aiops, aliases: [distributed tracing]}
+- {key: jaeger, name: Jaeger, category: aiops, implies: [tracing], adjacent: [opentelemetry]}
+- {key: opentelemetry, name: OpenTelemetry, category: aiops, aliases: [otel, open telemetry], implies: [observability], adjacent: [jaeger]}
+- {key: datadog, name: Datadog, category: aiops, implies: [monitoring], adjacent: [prometheus, new_relic]}
+- {key: new_relic, name: New Relic, category: aiops, implies: [monitoring], adjacent: [datadog]}
+- {key: cloudwatch, name: CloudWatch, category: aiops, aliases: [aws cloudwatch], implies: [aws, monitoring], adjacent: [azure_monitor]}
+- {key: pagerduty, name: PagerDuty, category: aiops, implies: [incident_management]}
+- {key: anomaly_detection, name: Anomaly Detection, category: aiops}
+- {key: auto_remediation, name: Auto-Remediation, category: aiops, aliases: [auto-remediation, auto remediation, auto-healing, auto healing, self-healing, auto-heal]}
+- {key: incident_management, name: Incident Management, category: aiops, aliases: [incident response, on-call, incident alerting]}
+- {key: sre, name: SRE, category: aiops, aliases: [site reliability engineering, site reliability]}
+- {key: slo, name: SLOs / SLIs, category: aiops, aliases: [slo, slos, sli, slis, sla, slas, error budget, error budgets]}
+- {key: chaos_engineering, name: Chaos Engineering, category: aiops}
+
+# ---------------- security ----------------
+- {key: iam, name: IAM, category: security, aliases: [iam policies, identity and access management]}
+- {key: keycloak, name: Keycloak, category: security, implies: [iam], adjacent: [oidc]}
+- {key: oidc, name: OIDC, category: security, aliases: [openid connect], adjacent: [oauth2]}
+- {key: oauth2, name: OAuth 2.0, category: security, aliases: [oauth, oauth2], adjacent: [oidc]}
+- {key: opa, name: OPA, category: security, aliases: [open policy agent, rego, opa/rego], adjacent: [kyverno]}
+- {key: kyverno, name: Kyverno, category: security, implies: [kubernetes], adjacent: [opa]}
+- {key: owasp, name: OWASP, category: security, aliases: [owasp top 10]}
+- {key: hipaa, name: HIPAA, category: security}
+- {key: gdpr, name: GDPR, category: security}
+- {key: iso_27001, name: ISO 27001, category: security, aliases: [iso/iec 27001, iso27001]}
+- {key: nist, name: NIST, category: security, aliases: [nist csf, nist 800-53]}
+- {key: zero_trust, name: Zero Trust, category: security, aliases: [zero trust architecture, software-defined perimeter, sdp]}
+- {key: hashicorp_vault, name: HashiCorp Vault, category: security, aliases: [vault], adjacent: [secrets_management]}
+- {key: secrets_management, name: Secrets Management, category: security, aliases: [centralised secrets, centralized secrets]}
+- {key: trivy, name: Trivy, category: security, implies: [container_security]}
+- {key: container_security, name: Container Security, category: security, aliases: [image scanning, image vulnerability, container scanning]}
+- {key: sast, name: SAST, category: security, aliases: [static code analysis, static analysis, static application security testing]}
+- {key: dast, name: DAST, category: security}
+- {key: supply_chain_security, name: Supply-Chain Security, category: security, aliases: [supply-chain security, supply chain security, sbom, slsa]}
+- {key: siem, name: SIEM, category: security}
+- {key: k8s_security, name: Kubernetes Security, category: security, aliases: [kubernetes hardening, pod security standards, network policies, network-policy, seccomp, apparmor, admission controllers, cis benchmark, cis benchmarks], implies: [kubernetes]}
+- {key: pod_security_policy, name: PodSecurityPolicy, category: security, aliases: [psp], ambiguous: true, outdated: "Removed in Kubernetes 1.25; replaced by Pod Security Standards / admission."}
+- {key: devsecops, name: DevSecOps, category: security}
+- {key: falco, name: Falco, category: security}
+- {key: sonarqube, name: SonarQube, category: security, implies: [sast]}
+- {key: snyk, name: Snyk, category: security}
+
+# ---------------- healthcare ----------------
+- {key: healthcare_ai, name: Healthcare AI, category: healthcare, aliases: [clinical ai, medical ai, sepsis-risk scoring, sepsis prediction]}
+- {key: phi, name: PHI, category: healthcare, aliases: [protected health information], ambiguous: true}
+- {key: fhir, name: FHIR, category: healthcare, aliases: [hl7 fhir]}
+- {key: hl7, name: HL7, category: healthcare}
+- {key: iot, name: IoT, category: healthcare, aliases: [internet of things, medical iot, iomt]}
+- {key: mimic, name: MIMIC Clinical Data, category: healthcare, aliases: [mimic-iii, mimic-iv, mimic iii, mimic iv]}
+- {key: ehr, name: EHR/EMR Systems, category: healthcare, aliases: [emr, ehr, electronic medical record, electronic health record, enmrs]}
+- {key: pharmacovigilance, name: Pharmacovigilance, category: healthcare, aliases: [adverse-event, adverse event, adsm]}
+- {key: clinical_domain, name: Clinical Domain Knowledge, category: healthcare, aliases: [clinical pharmacist, hospital pharmacist, medication safety]}
+
+# ---------------- data ----------------
+- {key: kafka, name: Apache Kafka, category: data, aliases: [kafka], adjacent: [rabbitmq]}
+- {key: zookeeper, name: ZooKeeper, category: data}
+- {key: rabbitmq, name: RabbitMQ, category: data, adjacent: [kafka]}
+- {key: postgresql, name: PostgreSQL, category: data, aliases: [postgres], implies: [sql], adjacent: [mysql]}
+- {key: mysql, name: MySQL, category: data, implies: [sql], adjacent: [postgresql]}
+- {key: mongodb, name: MongoDB, category: data}
+- {key: redis, name: Redis, category: data}
+- {key: pgvector, name: pgvector, category: data, implies: [postgresql, vector_database]}
+- {key: spark, name: Apache Spark, category: data, aliases: [pyspark]}
+- {key: airflow, name: Apache Airflow, category: data, aliases: [airflow]}
+- {key: etl, name: ETL, category: data, aliases: [data pipelines, data pipeline]}
+- {key: event_driven, name: Event-Driven Architecture, category: data, aliases: [event-driven, event driven, streaming, real-time streaming]}
+
+# ---------------- other ----------------
+- {key: jira, name: Jira, category: other}
+- {key: agile, name: Agile/Scrum, category: other, aliases: [scrum, agile]}
+- {key: microservices, name: Microservices, category: other, aliases: [microservice]}
+- {key: system_design, name: System Design, category: other, aliases: [architecture design]}

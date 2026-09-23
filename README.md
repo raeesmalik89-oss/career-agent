@@ -11,8 +11,8 @@ The design is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 | # | Milestone | Status |
 |---|-----------|--------|
 | 1 | Repository + backend + database | ✅ done |
-| 2 | Resume Analyzer | next |
-| 3 | GitHub Analyzer | |
+| 2 | Resume Analyzer | ✅ done |
+| 3 | GitHub Analyzer | next |
 | 4 | Job Search Engine | |
 | 5 | Matching Engine | |
 | 6 | Dashboard | |
@@ -34,6 +34,15 @@ The design is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 - **Agent base class**: every agent run is stored in `agent_runs` with `agent_name, run_id, input_summary, actions, output, confidence, errors, timestamp`.
 - Tests, Dockerfile, docker-compose, Makefile, and GitHub Actions CI (lint, gitleaks, SQLite + PostgreSQL tests, image build + Trivy).
 
+### What Milestone 2 contains
+- **Resume Analyzer Agent** (`agents/resume_agent/`): PDF (including two-column layouts), DOCX and TXT parsing. Every extracted line keeps its page and character offsets.
+- **Deterministic extraction** of personal details, experience (title, organisation, dates, training flag, sector), projects, education, certifications, licences, languages, availability and measurable achievements. There is no LLM in this path, so nothing can be invented.
+- **Skill taxonomy** (`data/taxonomy/skills.yaml`, 169 skills) with aliases, `implies`, `adjacent` and `outdated`. Ambiguous names such as "Go" are only matched inside a skills list.
+- **Cross-version merging**: the same job, degree or project from several CV versions becomes one fact that lists every source. Disagreements (e.g. *Trainee* vs *Intern*) are recorded as **conflicts** for you to resolve, never resolved silently.
+- **Fact review**: every fact starts as `pending`; you verify, edit or reject it. Applications may only use verified facts for auto-submit (Milestone 7).
+- **Resume Intelligence report**: skills by category with evidence level, experience months per sector (overlaps counted once, training kept separate), missing evidence, duplicate and outdated skills, weak sections, single-source metrics to double-check, and recommendations.
+- Skill levels from a resume are capped at `working` (used in experience/projects) or `exposure` (only listed). `strong` requires GitHub evidence (Milestone 3) or your confirmation.
+
 ## API (so far)
 
 | Method | Path | Role |
@@ -43,6 +52,11 @@ The design is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 | POST | `/api/v1/auth/totp/setup` · `/totp/verify` | owner |
 | GET/PUT | `/api/v1/settings` · GET `/settings/history` | any / owner |
 | GET/PATCH | `/api/v1/sources` · `/sources/{key}` | any / owner |
+| POST | `/api/v1/resume/upload` (multipart, 1-20 files) | owner |
+| GET | `/api/v1/resume/versions` · `/api/v1/resume/intelligence` | any |
+| GET/POST | `/api/v1/profile/facts` | any / owner |
+| PATCH | `/api/v1/profile/facts/{id}` (edit, reject, resolve conflicts) | owner |
+| POST | `/api/v1/profile/facts/{id}/verify` | owner |
 | GET | `/api/v1/audit-logs` · `/api/v1/agent-runs` | owner |
 | GET | `/healthz` · `/readyz` · `/metrics` · `/docs` (dev only) | – |
 
@@ -53,6 +67,17 @@ The design is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 uv sync
 uv run pytest
 ```
+
+### Windows (no Docker): local dev database + your documents
+```powershell
+uv run python -m app.cli gen-keys          # put both values in .env, plus DATABASE_URL=sqlite:///storage/dev.db
+uv run alembic upgrade head
+uv run python -m app.cli seed
+uv run python -m app.cli create-owner --email you@example.com --name "Your Name"
+uv run python -m app.cli import-profile --email you@example.com main_cv.pdf other_cv.docx certificate.pdf
+uv run python -m app.cli report --email you@example.com --out storage/resume_report.json
+```
+The first file you import is treated as your primary resume. `storage/` (database, copies of your documents, reports) is git-ignored.
 
 ### WSL / Linux with Docker (full stack)
 ```bash

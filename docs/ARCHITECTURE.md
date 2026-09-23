@@ -94,10 +94,10 @@ All agents return the same envelope:
 class AgentResult(BaseModel):
     agent_name: str
     run_id: UUID
-    input_summary: str            # no PII beyond IDs
-    actions: list[AgentAction]    # {type, target, detail, at}
-    output: dict                  # agent-specific, schema-validated
-    confidence: Literal["high","medium","low"]
+    input_summary: str  # no PII beyond IDs
+    actions: list[AgentAction]  # {type, target, detail, at}
+    output: dict  # agent-specific, schema-validated
+    confidence: Literal["high", "medium", "low"]
     errors: list[AgentError]
     timestamp: datetime
 ```

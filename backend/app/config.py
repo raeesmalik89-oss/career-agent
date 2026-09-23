@@ -27,6 +27,8 @@ class Settings(BaseSettings):
     cors_origins: list[str] = ["http://localhost:3000"]
     login_rate_limit_per_minute: int = 5
     timezone: str = "Asia/Karachi"
+    # Uploaded resumes/certificates and generated files. Never commit this directory.
+    storage_dir: str = "storage"
 
     @field_validator("cookie_secure")
     @classmethod

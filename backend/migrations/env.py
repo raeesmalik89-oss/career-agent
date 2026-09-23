@@ -13,7 +13,9 @@ target_metadata = Base.metadata
 def _url() -> str:
     url = config.attributes.get("url") or os.environ.get("DATABASE_URL")
     if not url:
-        raise RuntimeError("DATABASE_URL is not set")
+        from app.config import get_settings  # reads .env
+
+        url = get_settings().database_url
     return url
 
 

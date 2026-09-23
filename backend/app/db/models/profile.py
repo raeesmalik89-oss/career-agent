@@ -5,7 +5,16 @@ from sqlalchemy import Boolean, Date, ForeignKey, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base, IdMixin, TimestampMixin, str_enum
-from app.db.enums import Confidence, FactType, FileFormat, ResumeKind, SkillCategory, SkillLevel, SourceType
+from app.db.enums import (
+    Confidence,
+    FactType,
+    FileFormat,
+    ResumeKind,
+    ReviewStatus,
+    SkillCategory,
+    SkillLevel,
+    SourceType,
+)
 from app.db.models.identity import user_fk
 from app.db.types import Embedding, JSONType
 
@@ -30,6 +39,7 @@ class ResumeVersion(IdMixin, TimestampMixin, Base):
     kind: Mapped[ResumeKind] = mapped_column(str_enum(ResumeKind, "resume_kind"), nullable=False)
     job_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("jobs.id", ondelete="SET NULL"))
     label: Mapped[str] = mapped_column(String(200), nullable=False)
+    original_filename: Mapped[str | None] = mapped_column(String(300))
     file_uri: Mapped[str] = mapped_column(String(1000), nullable=False)
     format: Mapped[FileFormat] = mapped_column(str_enum(FileFormat, "file_format"), nullable=False)
     sha256: Mapped[str] = mapped_column(String(64), nullable=False)
@@ -45,14 +55,21 @@ class ProfileFact(IdMixin, TimestampMixin, Base):
     """The anti-hallucination anchor: every claim about the user must cite one of these rows."""
 
     __tablename__ = "profile_facts"
+    __table_args__ = (UniqueConstraint("user_id", "fact_type", "fact_key"),)
 
     user_id: Mapped[uuid.UUID] = user_fk()
     fact_type: Mapped[FactType] = mapped_column(str_enum(FactType, "fact_type"), nullable=False, index=True)
+    # Stable identity across resume versions (e.g. "experience:al nafi international college|2024").
+    fact_key: Mapped[str] = mapped_column(String(200), nullable=False)
     data: Mapped[dict] = mapped_column(JSONType, nullable=False)
     source_type: Mapped[SourceType] = mapped_column(str_enum(SourceType, "source_type"), nullable=False)
-    # {resume_version_id, page, char_span} | {repo, path, sha} | {entered_by, at}
+    # {"sources": [{document_id, label, page, start, end, snippet} | {repo, path, sha} | {entered_by, at}]}
     source_ref: Mapped[dict] = mapped_column(JSONType, nullable=False)
-    verified_by_user: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # Only the user can verify. Generated application text may cite pending/verified facts, never rejected ones;
+    # automatic submission requires verified facts.
+    review_status: Mapped[ReviewStatus] = mapped_column(
+        str_enum(ReviewStatus, "review_status"), default=ReviewStatus.pending, nullable=False
+    )
     confidence: Mapped[Confidence] = mapped_column(str_enum(Confidence, "confidence"), nullable=False)
 
 
@@ -60,10 +77,12 @@ class Skill(IdMixin, TimestampMixin, Base):
     __tablename__ = "skills"
 
     canonical_name: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
+    display_name: Mapped[str] = mapped_column(String(100), nullable=False)
     category: Mapped[SkillCategory] = mapped_column(str_enum(SkillCategory, "skill_category"), nullable=False)
     aliases: Mapped[list] = mapped_column(JSONType, default=list, nullable=False)
     adjacent: Mapped[list] = mapped_column(JSONType, default=list, nullable=False)
     parent_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("skills.id", ondelete="SET NULL"))
+    outdated_reason: Mapped[str | None] = mapped_column(Text)
     embedding: Mapped[list | None] = mapped_column(Embedding())
 
 
