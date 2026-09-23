@@ -106,9 +106,13 @@ class JobDiscoveryAgent(Agent[DiscoveryInput]):
         per_source: Counter = Counter()
         stale = 0
 
-        def run(query_set: list[str]) -> None:
+        def run(query_set: list[str], include_metered: bool = True) -> None:
             nonlocal stale
-            connectors = {src.key: make_connector(src, http, db, payload.user_id) for src in sources}
+            connectors = {
+                src.key: make_connector(src, http, db, payload.user_id)
+                for src in sources
+                if include_metered or not CONNECTORS[src.key].metered
+            }
 
             def fetch(key: str) -> tuple[str, list[JobPosting] | SourceError]:
                 try:
@@ -119,7 +123,7 @@ class JobDiscoveryAgent(Agent[DiscoveryInput]):
             # Sources are different hosts, so they are fetched in parallel; DB writes stay on this thread.
             with ThreadPoolExecutor(max_workers=6) as pool:
                 results = dict(pool.map(fetch, connectors))
-            for src in sources:
+            for src in [s for s in sources if s.key in connectors]:
                 used = getattr(connectors[src.key], "requests_made", 0)
                 if used:  # metered sources (Jooble) keep a running count of their request quota
                     src.config = {
@@ -144,7 +148,7 @@ class JobDiscoveryAgent(Agent[DiscoveryInput]):
         widened = False
         if len(raw_ids) < min_scanned:  # keep scanning wider until the daily minimum is met (never inflate scores)
             widened = True
-            run([w for w in WIDER_QUERIES if w not in queries])
+            run([w for w in WIDER_QUERIES if w not in queries], include_metered=False)
         output = {
             "scanned": len(raw_ids),
             "min_scanned": min_scanned,

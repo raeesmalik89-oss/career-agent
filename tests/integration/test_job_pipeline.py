@@ -195,3 +195,33 @@ def test_secrets_are_encrypted_and_never_returned(client, db, owner):
     row = db.scalars(select(Secret).where(Secret.name == "jooble_api_key")).one()
     assert b"abcd-1234-efgh" not in row.ciphertext
     assert client.put("/api/v1/secrets", headers=headers, json={"name": "other", "value": "x" * 8}).status_code == 422
+
+
+def test_widening_never_spends_metered_quota(db, owner, sources):
+    from app.core import crypto
+
+    jooble = db.scalars(select(JobSource).where(JobSource.key == "jooble")).one()
+    jooble.enabled = True
+    db.add(
+        Secret(
+            user_id=owner.id,
+            name="jooble_api_key",
+            key_version=1,
+            ciphertext=crypto.encrypt("abcd-1234-efgh-5678", b"jooble_api_key"),
+        )
+    )
+    db.flush()
+    http = FakeHttp({"https://jooble.org/api/": {"jobs": []}, REMOTIVE: remotive_payload(MOCK_SPECS[:2])})
+    result = run_job_scan(db, owner.id, source_keys=["remotive", "jooble"], http=http)
+    assert result["discovery"]["widened"]
+    assert sum("jooble.org" in c for c in http.calls) == 4  # one pass only, not repeated when widening
+    assert jooble.config["requests_used"] == 4
+
+
+def test_jooble_country_host():
+    payload = {"jobs": []}
+    http = FakeHttp({"https://pk.jooble.org/api/": payload})
+    Jooble(http, {"api_key": "abcd-1234-efgh-5678", "api_host": "pk.jooble.org"}).fetch(["devops"], 5)
+    assert http.calls[0].startswith("https://pk.jooble.org/api/")
+    with pytest.raises(SourceError, match="unsupported"):
+        Jooble(FakeHttp({}), {"api_key": "abcd-1234-efgh-5678", "api_host": "evil.example.com"}).fetch(["x"], 5)

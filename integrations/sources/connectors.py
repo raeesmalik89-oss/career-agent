@@ -363,7 +363,8 @@ class Jooble(Connector):
     """
 
     key = "jooble"
-    hosts = ("jooble.org",)
+    hosts = ("jooble.org", "pk.jooble.org")
+    metered = True  # every request counts against a small quota
     DEFAULT_SEARCHES = (
         ("devops", "Islamabad"),
         ("cloud engineer", "Islamabad"),
@@ -387,9 +388,10 @@ class Jooble(Connector):
         searches = [tuple(x) for x in self.config.get("searches", self.DEFAULT_SEARCHES)]
         out: dict[str, JobPosting] = {}
         for keywords, location in searches[: min(len(searches), remaining)]:
-            data = self.http.post_json(
-                f"https://jooble.org/api/{api_key}", {"keywords": keywords, "location": location}
-            )
+            host = self.config.get("api_host", "jooble.org")  # keys are issued per country site
+            if host not in self.hosts:
+                raise SourceError(f"unsupported Jooble host {host!r}")
+            data = self.http.post_json(f"https://{host}/api/{api_key}", {"keywords": keywords, "location": location})
             self.requests_made += 1
             for j in data.get("jobs", []):
                 jid = str(j.get("id") or j.get("link"))

@@ -51,6 +51,7 @@ class JobPosting:
 class Connector(ABC):
     key: str
     hosts: tuple[str, ...]
+    metered: bool = False  # True when requests count against a quota: never used for "widening" retries
 
     def __init__(self, http: "HttpClient", config: dict | None = None):
         self.http = http
