@@ -7,7 +7,7 @@ from prometheus_client import CONTENT_TYPE_LATEST, Counter, Histogram, generate_
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from app.api.v1 import auth, github, ops, resume, settings, sources
+from app.api.v1 import auth, github, jobs, ops, resume, settings, sources
 from app.config import get_settings
 from app.db.session import get_db
 
@@ -48,7 +48,7 @@ def create_app() -> FastAPI:
         response.headers.setdefault("Cache-Control", "no-store")
         return response
 
-    for r in (auth.router, settings.router, sources.router, resume.router, github.router, ops.router):
+    for r in (auth.router, settings.router, sources.router, resume.router, github.router, jobs.router, ops.router):
         app.include_router(r, prefix="/api/v1")
 
     @app.get("/healthz", tags=["ops"])

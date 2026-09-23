@@ -63,6 +63,13 @@ def engine(tmp_path_factory):
         @event.listens_for(eng, "connect")
         def _fk_on(dbapi_conn, _):
             dbapi_conn.execute("PRAGMA foreign_keys=ON")
+            # pysqlite starts transactions lazily, which breaks SAVEPOINT-based test isolation: a commit inside a
+            # test would persist. Let SQLAlchemy emit BEGIN itself (documented SQLAlchemy recipe).
+            dbapi_conn.isolation_level = None
+
+        @event.listens_for(eng, "begin")
+        def _begin(conn):
+            conn.exec_driver_sql("BEGIN")
 
     with eng.begin() as conn:
         alembic_upgrade(conn)

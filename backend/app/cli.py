@@ -48,8 +48,15 @@ def set_password(email: str) -> None:
         user = _user(db, email)
         user.password_hash = hash_password(password)
         user.failed_logins, user.locked_until = 0, None
-        audit.record(db, action="user.set_password", actor=Actor.system, actor_detail="cli", user_id=user.id,
-                     entity_type="users", entity_id=user.id)  # fmt: skip
+        audit.record(
+            db,
+            action="user.set_password",
+            actor=Actor.system,
+            actor_detail="cli",
+            user_id=user.id,
+            entity_type="users",
+            entity_id=user.id,
+        )
         db.commit()
     print("password updated")
 
@@ -70,8 +77,16 @@ def import_profile(email: str, paths: list[str], reanalyze: bool) -> None:
             user_id=user.id, documents=[DocumentInput(path=p) for p in paths], reanalyze=reanalyze
         )
         result = ResumeAnalyzerAgent().run(payload, db, user_id=user.id)
-        audit.record(db, action="resume.import", actor=Actor.user, actor_detail="cli", user_id=user.id,
-                     entity_type="agent_runs", entity_id=result.run_id, after={"files": len(paths)})  # fmt: skip
+        audit.record(
+            db,
+            action="resume.import",
+            actor=Actor.user,
+            actor_detail="cli",
+            user_id=user.id,
+            entity_type="agent_runs",
+            entity_id=result.run_id,
+            after={"files": len(paths)},
+        )
         db.commit()
     for a in result.actions:
         print(f"  {a.type:<24} {a.target or ''} {a.detail}")
@@ -89,8 +104,16 @@ def github_sync(email: str, username: str, out: str | None, identities: list[str
         user = _user(db, email)
         payload = GithubAnalyzerInput(user_id=user.id, username=username, extra_identities=identities)
         result = GithubAnalyzerAgent().run(payload, db, user_id=user.id)
-        audit.record(db, action="github.sync", actor=Actor.user, actor_detail="cli", user_id=user.id,
-                     entity_type="agent_runs", entity_id=result.run_id, after={"username": username})  # fmt: skip
+        audit.record(
+            db,
+            action="github.sync",
+            actor=Actor.user,
+            actor_detail="cli",
+            user_id=user.id,
+            entity_type="agent_runs",
+            entity_id=result.run_id,
+            after={"username": username},
+        )
         db.commit()
     for a in result.actions:
         if a.type != "skip_fork":
@@ -102,6 +125,98 @@ def github_sync(email: str, username: str, out: str | None, identities: list[str
             fh.write(json.dumps(result.output, indent=2, ensure_ascii=False, default=str))
         print(f"report written to {out}")
     print(f"run {result.run_id}: {'ok' if result.ok else 'with errors'}")
+
+
+def sources_cmd(enable: list[str], disable: list[str], companies: dict[str, list[str]]) -> None:
+    from app.db.models import JobSource
+
+    with get_sessionmaker()() as db:
+        rows = {s.key: s for s in db.scalars(select(JobSource))}
+        for key in enable + disable + list(companies):
+            if key not in rows:
+                sys.exit(f"unknown source {key}; known: {', '.join(sorted(rows))}")
+        for key in enable:
+            if not rows[key].read_allowed:
+                sys.exit(f"{key} is not permitted for reading")
+            rows[key].enabled = True
+        for key in disable:
+            rows[key].enabled = False
+        for key, names in companies.items():
+            rows[key].config = {**(rows[key].config or {}), "companies": names}
+        for key in enable + disable + list(companies):
+            audit.record(
+                db,
+                action="source.update",
+                actor=Actor.user,
+                actor_detail="cli",
+                entity_type="job_sources",
+                entity_id=rows[key].id,
+                after={"enabled": rows[key].enabled, "config": rows[key].config},
+            )
+        db.commit()
+        for s in sorted(rows.values(), key=lambda s: s.key):
+            extra = f" companies={len(s.config.get('companies', []))}" if "companies" in (s.config or {}) else ""
+            print(f"  {'ON ' if s.enabled else 'off'} {s.key:<18}{extra}  {s.tos_notes or ''}")
+
+
+def scan_jobs(email: str, source_keys: list[str] | None) -> None:
+    import json
+
+    from agents.job_agent.agents import run_job_scan
+
+    with get_sessionmaker()() as db:
+        user = _user(db, email)
+        result = run_job_scan(db, user.id, source_keys=source_keys or None)
+        audit.record(
+            db,
+            action="jobs.scan",
+            actor=Actor.user,
+            actor_detail="cli",
+            user_id=user.id,
+            entity_type="pipeline",
+            entity_id=result["pipeline_run_id"],
+        )
+        db.commit()
+    print(
+        json.dumps(
+            {k: v for k, v in result.items() if k != "ingest"}
+            | {"ingest": {k: v for k, v in result["ingest"].items() if k != "job_ids"}},
+            indent=2,
+            default=str,
+        )
+    )
+
+
+def set_secret(email: str, name: str) -> None:
+    from app.api.v1.jobs import SECRET_NAMES
+    from app.config import get_settings
+    from app.core import crypto
+    from app.db.models import Secret
+
+    if name not in SECRET_NAMES:
+        sys.exit(f"name must be one of {sorted(SECRET_NAMES)}")
+    value = getpass.getpass(f"{name} (input hidden): ").strip()
+    if len(value) < 4:
+        sys.exit("value too short")
+    with get_sessionmaker()() as db:
+        user = _user(db, email)
+        row = db.scalars(select(Secret).where(Secret.user_id == user.id, Secret.name == name)).first()
+        blob = crypto.encrypt(value, name.encode())
+        if row is None:
+            db.add(Secret(user_id=user.id, name=name, ciphertext=blob, key_version=get_settings().master_key_version))
+        else:
+            row.ciphertext = blob
+        audit.record(
+            db,
+            action="secret.put",
+            actor=Actor.user,
+            actor_detail="cli",
+            user_id=user.id,
+            entity_type="secrets",
+            entity_id=name,
+        )
+        db.commit()
+    print(f"{name} stored (encrypted)")
 
 
 def report(email: str, out: str | None) -> None:
@@ -165,6 +280,22 @@ def main(argv: list[str] | None = None) -> None:
     gs.add_argument("--username", required=True)
     gs.add_argument("--identity", action="append", default=[], help="another commit email/name you use")
     gs.add_argument("--out")
+    so = sub.add_parser("sources")
+    so.add_argument("--enable", nargs="*", default=[])
+    so.add_argument("--disable", nargs="*", default=[])
+    so.add_argument(
+        "--companies",
+        nargs="+",
+        metavar="SOURCE=a,b,c",
+        default=[],
+        help="board tokens for greenhouse/lever/ashby, e.g. greenhouse=gitlab,canonical",
+    )
+    sj = sub.add_parser("scan-jobs")
+    sj.add_argument("--email", required=True)
+    sj.add_argument("--source", action="append")
+    ss = sub.add_parser("set-secret")
+    ss.add_argument("--email", required=True)
+    ss.add_argument("--name", required=True)
     rp = sub.add_parser("report")
     rp.add_argument("--email", required=True)
     rp.add_argument("--out")
@@ -179,6 +310,13 @@ def main(argv: list[str] | None = None) -> None:
         import_profile(args.email, args.files, args.reanalyze)
     elif args.cmd == "github-sync":
         github_sync(args.email, args.username, args.out, args.identity)
+    elif args.cmd == "sources":
+        companies = {k: [c for c in v.split(",") if c] for k, _, v in (x.partition("=") for x in args.companies)}
+        sources_cmd(args.enable, args.disable, companies)
+    elif args.cmd == "scan-jobs":
+        scan_jobs(args.email, args.source)
+    elif args.cmd == "set-secret":
+        set_secret(args.email, args.name)
     elif args.cmd == "report":
         report(args.email, args.out)
     else:

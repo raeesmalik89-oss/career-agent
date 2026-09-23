@@ -93,7 +93,7 @@
 - {key: numpy, name: NumPy, category: ai_ml, implies: [python]}
 - {key: xgboost, name: XGBoost, category: ai_ml, implies: [machine_learning], adjacent: [ensembles]}
 - {key: isolation_forest, name: Isolation Forest, category: ai_ml, implies: [anomaly_detection, machine_learning]}
-- {key: ensembles, name: Ensemble Methods, category: ai_ml, aliases: [ensemble, bagging, boosting, bagging/boosting ensembles], implies: [machine_learning]}
+- {key: ensembles, name: Ensemble Methods, category: ai_ml, aliases: [ensemble methods, ensemble models, ensemble learning, bagging, gradient boosting, bagging/boosting ensembles], implies: [machine_learning]}
 - {key: pca, name: PCA, category: ai_ml, aliases: [principal component analysis], implies: [machine_learning]}
 - {key: capsule_networks, name: Capsule Networks, category: ai_ml, implies: [deep_learning]}
 - {key: jupyter, name: Jupyter, category: ai_ml, aliases: [jupyter notebook, jupyter notebooks]}

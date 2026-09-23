@@ -13,8 +13,8 @@ The design is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 | 1 | Repository + backend + database | ✅ done |
 | 2 | Resume Analyzer | ✅ done |
 | 3 | GitHub Analyzer | ✅ done |
-| 4 | Job Search Engine | next |
-| 5 | Matching Engine | |
+| 4 | Job Search Engine | ✅ done |
+| 5 | Matching Engine | next |
 | 6 | Dashboard | |
 | 7 | Application Engine | |
 | 8 | Interview Coach | |
@@ -52,6 +52,14 @@ The design is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 - **Combined skill levels** (`agents/skill_levels.py`): `strong` needs high evidence in 2 or more of your own repos (plus resume use) or in 3 or more repos; `working` needs 1 repo or resume use; `exposure` means listed only.
 - **GitHub Intelligence report**: evidence map, repository scores, resume-vs-GitHub (confirmed / resume-only / GitHub-only) and recommendations.
 
+### What Milestone 4 contains
+- **Read-only connectors** (`integrations/sources/`): RemoteOK, Remotive (3 category feeds a day, per its terms), Himalayas, Arbeitnow, We Work Remotely (RSS), and the company boards of Greenhouse, Lever and Ashby (you choose the companies), plus Jooble (needs your free API key; covers Islamabad) and manual paste. LinkedIn/Indeed/Glassdoor/Rozee are never scraped.
+- **Safe HTTP client**: https only, host allowlist (SSRF guard, including redirects), 20 MB cap, per-host pacing, and a 90 s limit on the whole response (one slow server can't stall a scan).
+- **Deterministic extraction** (`agents/job_agent/extract.py`): role family, seniority, years required, required vs preferred skills (by section headings), remote type, salary (only when the posting states it), visa and clearance. **Pakistan eligibility always comes with the text that justifies it**; if nothing is stated it is `unknown` ("Evidence not found."), never eligible.
+- **Deduplication**: the same vacancy on several boards becomes one job with every source linked. Location variants are merged, and if any variant accepts Pakistan the job is eligible. A job only gets a new `content_version` when its own posting changes materially (title, seniority, remote, eligibility, salary or required skills), so unchanged jobs are never shown twice.
+- **Daily minimum**: if fewer than `daily_min_jobs_scanned` postings are found, the scan widens its queries and reports any shortfall. Scores are never inflated to compensate.
+- 30+ mock jobs (`tests/fixtures/jobs.py`) and a fake HTTP client, so the tests never use the network.
+
 ## API (so far)
 
 | Method | Path | Role |
@@ -68,6 +76,9 @@ The design is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 | POST | `/api/v1/profile/facts/{id}/verify` | owner |
 | POST | `/api/v1/github/sync` | owner |
 | GET | `/api/v1/github/repos` · `/api/v1/github/intelligence` | any |
+| POST | `/api/v1/jobs/scan` · `/api/v1/jobs/manual` | owner |
+| GET | `/api/v1/jobs` (filters: family, remote, pk, q, since) · `/api/v1/jobs/{id}` · `/api/v1/jobs-stats` | any |
+| PUT | `/api/v1/secrets` (stored encrypted, never returned) | owner |
 | GET | `/api/v1/audit-logs` · `/api/v1/agent-runs` | owner |
 | GET | `/healthz` · `/readyz` · `/metrics` · `/docs` (dev only) | – |
 
@@ -88,6 +99,8 @@ uv run python -m app.cli create-owner --email you@example.com --name "Your Name"
 uv run python -m app.cli import-profile --email you@example.com main_cv.pdf other_cv.docx certificate.pdf
 uv run python -m app.cli report --email you@example.com --out storage/resume_report.json
 uv run python -m app.cli github-sync --email you@example.com --username your-github --out storage/github_report.json
+uv run python -m app.cli sources --enable remoteok remotive himalayas weworkremotely arbeitnow greenhouse ashby     --companies greenhouse=gitlab,canonical,grafanalabs,cloudflare,elastic,mongodb,datadog ashby=supabase,posthog,replit,render
+uv run python -m app.cli scan-jobs --email you@example.com
 ```
 The first file you import is treated as your primary resume. `storage/` (database, copies of your documents, reports) is git-ignored.
 
