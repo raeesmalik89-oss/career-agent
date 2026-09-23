@@ -12,8 +12,8 @@ The design is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 |---|-----------|--------|
 | 1 | Repository + backend + database | ✅ done |
 | 2 | Resume Analyzer | ✅ done |
-| 3 | GitHub Analyzer | next |
-| 4 | Job Search Engine | |
+| 3 | GitHub Analyzer | ✅ done |
+| 4 | Job Search Engine | next |
 | 5 | Matching Engine | |
 | 6 | Dashboard | |
 | 7 | Application Engine | |
@@ -43,6 +43,15 @@ The design is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 - **Resume Intelligence report**: skills by category with evidence level, experience months per sector (overlaps counted once, training kept separate), missing evidence, duplicate and outdated skills, weak sections, single-source metrics to double-check, and recommendations.
 - Skill levels from a resume are capped at `working` (used in experience/projects) or `exposure` (only listed). `strong` requires GitHub evidence (Milestone 3) or your confirmation.
 
+### What Milestone 3 contains
+- **GitHub Analyzer Agent** (`agents/github_agent/`): lists public repos through the GitHub API (no token needed), then makes a **bare, partial, read-only clone** (`--filter=blob:limit=1m`). Nothing is checked out or executed, and large model files are never downloaded.
+- **File-level detectors** for Dockerfiles, Compose, Kubernetes manifests, Helm/Kustomize, Terraform resources and providers, Ansible, GitHub Actions/GitLab CI/Jenkins, Python imports and API routes, notebooks, dependencies, Prometheus/Grafana/OPA/Keycloak configs and tests. **A repository's name is never evidence.**
+- **Evidence strength**: `high` = real code/config/CI; `medium` = declared only (e.g. requirements.txt); `low` = README mention only, which never creates a skill.
+- **Authorship**: commits are classified as yours, a server default identity (e.g. `Ubuntu`) or other people. Evidence from repos mostly written by others is downgraded.
+- **Project verification**: each resume project is linked to its repo (explicit URL, `github_repo` on the fact, or a distinctive name match). Its claimed technologies are split into *verified*, *README only*, *not found* and *not checkable*.
+- **Combined skill levels** (`agents/skill_levels.py`): `strong` needs high evidence in 2 or more of your own repos (plus resume use) or in 3 or more repos; `working` needs 1 repo or resume use; `exposure` means listed only.
+- **GitHub Intelligence report**: evidence map, repository scores, resume-vs-GitHub (confirmed / resume-only / GitHub-only) and recommendations.
+
 ## API (so far)
 
 | Method | Path | Role |
@@ -57,6 +66,8 @@ The design is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 | GET/POST | `/api/v1/profile/facts` | any / owner |
 | PATCH | `/api/v1/profile/facts/{id}` (edit, reject, resolve conflicts) | owner |
 | POST | `/api/v1/profile/facts/{id}/verify` | owner |
+| POST | `/api/v1/github/sync` | owner |
+| GET | `/api/v1/github/repos` · `/api/v1/github/intelligence` | any |
 | GET | `/api/v1/audit-logs` · `/api/v1/agent-runs` | owner |
 | GET | `/healthz` · `/readyz` · `/metrics` · `/docs` (dev only) | – |
 
@@ -76,8 +87,18 @@ uv run python -m app.cli seed
 uv run python -m app.cli create-owner --email you@example.com --name "Your Name"
 uv run python -m app.cli import-profile --email you@example.com main_cv.pdf other_cv.docx certificate.pdf
 uv run python -m app.cli report --email you@example.com --out storage/resume_report.json
+uv run python -m app.cli github-sync --email you@example.com --username your-github --out storage/github_report.json
 ```
 The first file you import is treated as your primary resume. `storage/` (database, copies of your documents, reports) is git-ignored.
+
+### WSL (Ubuntu) without Docker
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh && source ~/.local/bin/env
+cd "/mnt/e/Users/Acer/Desktop/MY WORK/career-agent"
+export UV_PROJECT_ENVIRONMENT=.venv-linux   # keep WSL's environment separate from the Windows .venv
+uv sync && uv run pytest
+PYTHONPATH=backend:. uv run uvicorn app.main:app --app-dir backend --host 127.0.0.1 --port 8000
+```
 
 ### WSL / Linux with Docker (full stack)
 ```bash

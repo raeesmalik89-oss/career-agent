@@ -80,6 +80,30 @@ def import_profile(email: str, paths: list[str], reanalyze: bool) -> None:
     print(f"run {result.run_id}: {'ok' if result.ok else 'with errors'}")
 
 
+def github_sync(email: str, username: str, out: str | None, identities: list[str]) -> None:
+    import json
+
+    from agents.github_agent.agent import GithubAnalyzerAgent, GithubAnalyzerInput
+
+    with get_sessionmaker()() as db:
+        user = _user(db, email)
+        payload = GithubAnalyzerInput(user_id=user.id, username=username, extra_identities=identities)
+        result = GithubAnalyzerAgent().run(payload, db, user_id=user.id)
+        audit.record(db, action="github.sync", actor=Actor.user, actor_detail="cli", user_id=user.id,
+                     entity_type="agent_runs", entity_id=result.run_id, after={"username": username})  # fmt: skip
+        db.commit()
+    for a in result.actions:
+        if a.type != "skip_fork":
+            print(f"  {a.type:<22} {a.target or ''} {a.detail}")
+    for e in result.errors:
+        print(f"  ERROR {e.code}: {e.message}")
+    if out:
+        with open(out, "w", encoding="utf-8") as fh:
+            fh.write(json.dumps(result.output, indent=2, ensure_ascii=False, default=str))
+        print(f"report written to {out}")
+    print(f"run {result.run_id}: {'ok' if result.ok else 'with errors'}")
+
+
 def report(email: str, out: str | None) -> None:
     import json
 
@@ -136,6 +160,11 @@ def main(argv: list[str] | None = None) -> None:
     ip.add_argument("--email", required=True)
     ip.add_argument("--reanalyze", action="store_true")
     ip.add_argument("files", nargs="+")
+    gs = sub.add_parser("github-sync")
+    gs.add_argument("--email", required=True)
+    gs.add_argument("--username", required=True)
+    gs.add_argument("--identity", action="append", default=[], help="another commit email/name you use")
+    gs.add_argument("--out")
     rp = sub.add_parser("report")
     rp.add_argument("--email", required=True)
     rp.add_argument("--out")
@@ -148,6 +177,8 @@ def main(argv: list[str] | None = None) -> None:
         set_password(args.email)
     elif args.cmd == "import-profile":
         import_profile(args.email, args.files, args.reanalyze)
+    elif args.cmd == "github-sync":
+        github_sync(args.email, args.username, args.out, args.identity)
     elif args.cmd == "report":
         report(args.email, args.out)
     else:

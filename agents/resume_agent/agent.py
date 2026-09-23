@@ -15,9 +15,10 @@ from agents.resume_agent.merge import fact_key, merge_data, same_entity
 from agents.resume_agent.parsing import ParsedDocument, UnsupportedDocument, parse_bytes
 from agents.resume_agent.report import build_report
 from agents.resume_agent.sections import split_sections
+from agents.skill_levels import recompute_user_skills
 from agents.taxonomy import Taxonomy, get_taxonomy
-from app.db.enums import Confidence, FactType, FileFormat, ResumeKind, SkillLevel, SourceType
-from app.db.models import ProfileFact, ResumeProfile, ResumeVersion, Skill, UserSkill
+from app.db.enums import Confidence, FactType, FileFormat, ResumeKind, SourceType
+from app.db.models import ProfileFact, ResumeProfile, ResumeVersion, Skill
 from app.services import storage
 
 _CONF_RANK = {"low": 0, "medium": 1, "high": 2}
@@ -63,7 +64,7 @@ class ResumeAnalyzerAgent(Agent[ResumeAnalyzerInput]):
 
     def execute(self, payload: ResumeAnalyzerInput, ctx: AgentContext) -> tuple[dict[str, Any], Confidence | None]:
         db, user_id = ctx.db, payload.user_id
-        skills = sync_taxonomy(db, self.taxonomy)
+        sync_taxonomy(db, self.taxonomy)
         profile = db.scalars(select(ResumeProfile).where(ResumeProfile.user_id == user_id)).first()
         facts = {(f.fact_type.value, f.fact_key): f for f in db.scalars(
             select(ProfileFact).where(ProfileFact.user_id == user_id))}  # fmt: skip
@@ -113,7 +114,7 @@ class ResumeAnalyzerAgent(Agent[ResumeAnalyzerInput]):
             if not is_cert:
                 self._update_profile(profile, extracted, parsed)
 
-        self._rebuild_user_skills(db, user_id, facts, skills)
+        recompute_user_skills(db, user_id, self.taxonomy)
         db.flush()
         report = build_report(db, user_id, self.taxonomy)
         conflicts = len(report["conflicts"])
@@ -222,30 +223,3 @@ class ResumeAnalyzerAgent(Agent[ResumeAnalyzerInput]):
                 links.setdefault(k, personal[k])
         profile.links = links
         profile.summary = profile.summary or parsed.get("summary")
-
-    def _rebuild_user_skills(self, db, user_id: uuid.UUID, facts: dict, skills: dict[str, Skill]) -> None:
-        """Level from resume evidence only: applied -> working, listed -> exposure. 'strong' needs GitHub/user proof."""
-        db.flush()
-        by_skill: dict[str, list[str]] = {}
-        for (ftype, _), f in facts.items():
-            if ftype in ("experience", "project") and f.review_status.value != "rejected":
-                for key in f.data.get("technologies", []):
-                    by_skill.setdefault(key, []).append(str(f.id))
-        current = {us.skill_id: us for us in db.scalars(select(UserSkill).where(UserSkill.user_id == user_id))}
-        for (ftype, key), f in facts.items():
-            if ftype != "skill_claim" or key not in skills:
-                continue
-            skill = skills[key]
-            us = current.get(skill.id)
-            if f.review_status.value == "rejected":
-                if us is not None:
-                    db.delete(us)
-                continue
-            level = SkillLevel.working if f.data.get("evidence") == "applied" else SkillLevel.exposure
-            if us is None:
-                us = UserSkill(user_id=user_id, skill_id=skill.id, level=level)
-                db.add(us)
-            elif us.level != SkillLevel.strong:  # never downgrade a level proven elsewhere
-                us.level = level
-            us.evidence_fact_ids = [str(f.id), *by_skill.get(key, [])]
-            us.is_outdated = bool(self.taxonomy.skills[key].outdated)
