@@ -238,8 +238,9 @@ def pk_eligibility(p: JobPosting, remote: str) -> tuple[str, str]:
             return "unknown", f"{remote} in Pakistan, city not stated. Evidence not found."
         if p.location:
             return "ineligible", f"{remote} role located in '{p.location}'"
-    if remote == "remote" and PK_PLACES.search(loc_blob):
-        return "eligible", f"remote role based in Pakistan ('{p.location}')"
+    place = PK_PLACES.search(loc_blob)
+    if remote == "remote" and place:
+        return "eligible", f"remote role based in Pakistan: '{place.group(0)}' (location: {p.location})"
     m = RESTRICTION_RX.search(p.description)
     restriction_quote = m.group(0).strip() if m else None
     if restriction_quote and not re.search(r"pakistan", restriction_quote, re.I):
