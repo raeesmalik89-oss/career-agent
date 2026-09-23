@@ -235,7 +235,8 @@ def match_jobs(email: str, out: str | None, show_hidden: bool) -> None:
         threshold = result.output.get("threshold", 80)
         shown = [(m, j) for m, j in rows if show_hidden or (not m.knockouts and m.estimated_fit_score >= threshold)]
         for m, j in shown:
-            flag = "NEW " if m.shown_to_user_at is None else "    "
+            visible = not m.knockouts and m.estimated_fit_score >= threshold
+            flag = "NEW " if visible and m.shown_to_user_at is None and not m.dismissed else "    "
             ko = f"  [hidden: {m.knockouts[0]['code']}]" if m.knockouts else ""
             score = f"{float(m.estimated_fit_score):5.1f} {m.score_confidence.value:<6}"
             print(f"{flag}{score} {j.title[:55]:<55} | {j.company[:28]}{ko}")
