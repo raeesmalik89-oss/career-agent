@@ -187,6 +187,19 @@ def scan_jobs(email: str, source_keys: list[str] | None) -> None:
     )
 
 
+def reanalyze_jobs() -> None:
+    from agents.job_agent.ingest import reanalyze_jobs as run
+    from agents.resume_agent.agent import sync_taxonomy
+    from agents.taxonomy import get_taxonomy
+
+    with get_sessionmaker()() as db:
+        tax = get_taxonomy()
+        counts = run(db, tax, sync_taxonomy(db, tax))
+        audit.record(db, action="jobs.reanalyze", actor=Actor.user, actor_detail="cli", after=counts)
+        db.commit()
+    print(f"re-analysed {counts['jobs']} jobs; {counts['updated']} changed classification")
+
+
 def set_secret(email: str, name: str) -> None:
     from app.api.v1.jobs import SECRET_NAMES
     from app.config import get_settings
@@ -293,6 +306,7 @@ def main(argv: list[str] | None = None) -> None:
     sj = sub.add_parser("scan-jobs")
     sj.add_argument("--email", required=True)
     sj.add_argument("--source", action="append")
+    sub.add_parser("reanalyze-jobs")
     ss = sub.add_parser("set-secret")
     ss.add_argument("--email", required=True)
     ss.add_argument("--name", required=True)
@@ -315,6 +329,8 @@ def main(argv: list[str] | None = None) -> None:
         sources_cmd(args.enable, args.disable, companies)
     elif args.cmd == "scan-jobs":
         scan_jobs(args.email, args.source)
+    elif args.cmd == "reanalyze-jobs":
+        reanalyze_jobs()
     elif args.cmd == "set-secret":
         set_secret(args.email, args.name)
     elif args.cmd == "report":

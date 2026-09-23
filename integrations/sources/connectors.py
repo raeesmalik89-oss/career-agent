@@ -365,6 +365,7 @@ class Jooble(Connector):
     key = "jooble"
     hosts = ("jooble.org", "pk.jooble.org")
     metered = True  # every request counts against a small quota
+    COUNTRY = {"pk.jooble.org": "Pakistan"}
     DEFAULT_SEARCHES = (
         ("devops", "Islamabad"),
         ("cloud engineer", "Islamabad"),
@@ -406,6 +407,8 @@ class Jooble(Connector):
                         application_url=j.get("link"),
                         description=html_to_text(j.get("snippet")),
                         location=j.get("location") or None,
+                        # a country site only lists jobs in that country (pk.jooble.org -> Pakistan)
+                        location_restrictions=[self.COUNTRY[host]] if host in self.COUNTRY else [],
                         employment_type=j.get("type") or None,
                         salary_text=j.get("salary") or None,
                         posted_at=parse_datetime(j.get("updated")),

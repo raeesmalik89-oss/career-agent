@@ -60,6 +60,11 @@ SALARY_RX = re.compile(
 
 ELIGIBLE_WORDS = re.compile(r"\b(worldwide|anywhere|global(ly)?|pakistan|south asia|asia|apac|asia[- ]pacific)\b", re.I)
 LOCAL_CITIES = re.compile(r"\b(islamabad|rawalpindi)\b", re.I)
+PK_PLACES = re.compile(
+    r"\b(pakistan|karachi|lahore|faisalabad|multan|peshawar|quetta|sialkot|gujranwala|hyderabad|abbottabad|"
+    r"islamabad|rawalpindi)\b",
+    re.I,
+)
 RESTRICTION_RX = re.compile(
     r"((must|need to|required to|should) (be )?(currently )?(be )?(located|based|resid\w*|living) in|"
     r"(only|exclusively) (open|available) to (candidates|applicants|residents) (in|from|of)|"
@@ -194,6 +199,7 @@ REMOTE_WORDS = [
         r"\b(fully |100% |completely )?remote\b(?![- ](debug\w*|access|sensing|control|monitoring|patient|work ?shop))",
         "remote",
     ),
+    (r"\bwork(ing)? from home\b|\bwfh\b", "remote"),
     (r"\bon[- ]?site\b|\bin[- ]office\b|\bin the office\b", "onsite"),
 ]
 
@@ -215,7 +221,7 @@ def restrictions_from_location(location: str | None) -> list[str]:
     """'Remote, Canada; Remote, United States' -> ['Canada', 'United States']."""
     out = []
     for seg in re.split(r";|\||/|\bor\b", location or ""):
-        seg = re.sub(r"\(?\b(remote|hq|headquarters|anywhere)\b\)?", " ", seg, flags=re.I)
+        seg = re.sub(r"\(?\b(remote|hq|headquarters|anywhere|work(ing)? from home|wfh)\b\)?", " ", seg, flags=re.I)
         seg = re.sub(r"^[\s,\-–:]+|[\s,\-–:]+$", "", seg)
         if seg:
             out.append(seg)
@@ -228,8 +234,12 @@ def pk_eligibility(p: JobPosting, remote: str) -> tuple[str, str]:
     if remote in ("onsite", "hybrid"):
         if LOCAL_CITIES.search(loc_blob):
             return "eligible", f"{remote} in '{p.location}'"
+        if p.location and re.fullmatch(r"\s*pakistan\s*", p.location, re.I):
+            return "unknown", f"{remote} in Pakistan, city not stated. Evidence not found."
         if p.location:
             return "ineligible", f"{remote} role located in '{p.location}'"
+    if remote == "remote" and PK_PLACES.search(loc_blob):
+        return "eligible", f"remote role based in Pakistan ('{p.location}')"
     m = RESTRICTION_RX.search(p.description)
     restriction_quote = m.group(0).strip() if m else None
     if restriction_quote and not re.search(r"pakistan", restriction_quote, re.I):

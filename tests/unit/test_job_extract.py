@@ -117,6 +117,10 @@ def test_remote_type(kw, expected):
         ({"remote_hint": "remote", "raw": {"timezoneRestrictions": [-5, -4]}}, "ineligible", "excludes"),
         ({"remote_hint": "remote", "description": "Work from anywhere in the world."}, "eligible", "anywhere"),
         ({"remote_hint": "remote"}, "unknown", "Evidence not found."),
+        ({"remote_hint": "remote", "location": "Karachi"}, "eligible", "based in Pakistan"),
+        ({"location": "Work from home"}, "unknown", "Evidence not found."),  # WFH alone says nothing about where
+        ({"remote_hint": "onsite", "location": "Pakistan"}, "unknown", "city not stated"),
+        ({"remote_hint": "onsite", "location": "Lahore"}, "ineligible", "Lahore"),
     ],
 )
 def test_pk_eligibility_always_has_evidence(kw, expected, evidence_part):

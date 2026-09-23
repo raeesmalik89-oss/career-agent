@@ -133,6 +133,15 @@ def upsert_job(
         job = Job(fingerprint=fp, first_seen_at=now, last_seen_at=now, content_version=1)
         db.add(job)
 
+    _apply(db, job, p, a, skills)
+    if status == "new":
+        db.add(JobSourceLink(job_id=job.id, raw_id=raw.id, source_id=source.id, url=p.url[:1000]))
+        db.flush()
+    return job, status
+
+
+def _apply(db: Session, job: Job, p: JobPosting, a: JobAnalysis, skills: dict[str, Skill]) -> None:
+    """Write a posting's analysis onto the job (fields + skills)."""
     job.title, job.company = p.title[:300], p.company[:300] or "Unknown company"
     job.company_normalized = norm_company(p.company)[:300]
     job.location = (p.location or None) and p.location[:300]
@@ -154,9 +163,6 @@ def upsert_job(
     job.description = p.description or "(no description provided by the source)"
     job.description_hash = hashlib.sha256(job.description.encode()).hexdigest()
     db.flush()
-    if status == "new":
-        db.add(JobSourceLink(job_id=job.id, raw_id=raw.id, source_id=source.id, url=p.url[:1000]))
-
     for js in db.scalars(select(JobSkill).where(JobSkill.job_id == job.id)):
         db.delete(js)
     for s in a.skills:
@@ -170,7 +176,35 @@ def upsert_job(
             )
         )
     db.flush()
-    return job, status
+
+
+def reanalyze_jobs(db: Session, taxonomy: Taxonomy, skills: dict[str, Skill]) -> dict:
+    """Re-run extraction on stored postings (no network). Used after extraction rules improve.
+
+    A job whose eligibility, role family, seniority or remote type changes gets a new content_version,
+    so it is re-evaluated (and, if it now qualifies, shown) like any materially changed posting.
+    """
+    counts = {"jobs": 0, "updated": 0}
+    for job in list(db.scalars(select(Job))):
+        primary = _primary_posting(db, job)
+        if primary is None:
+            continue
+        counts["jobs"] += 1
+        p = _posting(primary)
+        a = analyze(p, taxonomy)
+        before = (job.pk_eligibility.value, job.role_family, job.seniority, job.remote_type.value)
+        _apply(db, job, p, a, skills)
+        # variants on other boards/locations may still upgrade eligibility, exactly as during a scan
+        for link in db.scalars(select(JobSourceLink).where(JobSourceLink.job_id == job.id)):
+            if link.raw_id != primary.id:
+                raw = db.get(JobRaw, link.raw_id)
+                variant = _posting(raw)
+                _fill_gaps(job, variant, analyze(variant, taxonomy), bump=False)
+        if (job.pk_eligibility.value, job.role_family, job.seniority, job.remote_type.value) != before:
+            job.content_version += 1
+            counts["updated"] += 1
+    db.flush()
+    return counts
 
 
 def _posting(raw: JobRaw) -> JobPosting:
@@ -205,7 +239,7 @@ def _primary_posting(db: Session, job: Job) -> JobRaw | None:
     ).first()
 
 
-def _fill_gaps(job: Job, p: JobPosting, a: JobAnalysis) -> None:
+def _fill_gaps(job: Job, p: JobPosting, a: JobAnalysis, bump: bool = True) -> None:
     """A duplicate from another board may carry facts the first source lacked (e.g. salary)."""
     if job.salary_min is None and a.salary_min:
         job.salary_min, job.salary_max = Decimal(str(a.salary_min)), Decimal(str(a.salary_max or a.salary_min))
@@ -215,4 +249,5 @@ def _fill_gaps(job: Job, p: JobPosting, a: JobAnalysis) -> None:
         # If any variant of the vacancy is open to Pakistan, the job is.
         job.pk_eligibility = PkEligibility(a.pk_eligibility)
         job.pk_eligibility_evidence = f"{a.pk_eligibility_evidence} (from {p.source})"
-        job.content_version += 1  # eligibility is material: the job may now be shown (or hidden)
+        if bump:
+            job.content_version += 1  # eligibility is material: the job may now be shown (or hidden)
