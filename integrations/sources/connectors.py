@@ -356,10 +356,24 @@ class Ashby(Connector):
 
 
 class Jooble(Connector):
-    """Needs a free API key (secret 'jooble_api_key'). Covers Pakistan, including Islamabad on-site roles."""
+    """Needs a free API key (secret 'jooble_api_key'). Covers Pakistan, including Islamabad on-site roles.
+
+    Free keys have a small total quota (500 requests), so each scan makes a few broad searches
+    (config.searches) instead of one request per query, and stops once config.quota is used up.
+    """
 
     key = "jooble"
     hosts = ("jooble.org",)
+    DEFAULT_SEARCHES = (
+        ("devops", "Islamabad"),
+        ("cloud engineer", "Islamabad"),
+        ("devops", "Pakistan"),
+        ("site reliability engineer", "Pakistan"),
+    )
+
+    def __init__(self, http, config=None):
+        super().__init__(http, config)
+        self.requests_made = 0
 
     def fetch(self, queries: list[str], limit: int) -> list[JobPosting]:
         api_key = self.config.get("api_key")
@@ -367,31 +381,35 @@ class Jooble(Connector):
             raise SourceError("Jooble needs an API key (register free at jooble.org/api/about)")
         if not re.fullmatch(r"[A-Za-z0-9-]{8,80}", api_key):
             raise SourceError("Jooble API key has an unexpected format")
+        remaining = int(self.config.get("quota", 500)) - int(self.config.get("requests_used", 0))
+        if remaining <= 0:
+            raise SourceError("Jooble request quota used up; ask Jooble for more or disable the source")
+        searches = [tuple(x) for x in self.config.get("searches", self.DEFAULT_SEARCHES)]
         out: dict[str, JobPosting] = {}
-        for location in self.config.get("locations", ["Islamabad", "Pakistan"]):
-            for q in queries:
-                data = self.http.post_json(f"https://jooble.org/api/{api_key}", {"keywords": q, "location": location})
-                for j in data.get("jobs", []):
-                    jid = str(j.get("id") or j.get("link"))
-                    out.setdefault(
-                        jid,
-                        JobPosting(
-                            source=self.key,
-                            external_id=jid,
-                            title=html_to_text(j.get("title")),
-                            company=(j.get("company") or "").strip(),
-                            url=j.get("link", ""),
-                            application_url=j.get("link"),
-                            description=html_to_text(j.get("snippet")),
-                            location=j.get("location") or None,
-                            employment_type=j.get("type") or None,
-                            salary_text=j.get("salary") or None,
-                            posted_at=parse_datetime(j.get("updated")),
-                            raw=j,
-                        ),
-                    )
-                if len(out) >= limit:
-                    break
+        for keywords, location in searches[: min(len(searches), remaining)]:
+            data = self.http.post_json(
+                f"https://jooble.org/api/{api_key}", {"keywords": keywords, "location": location}
+            )
+            self.requests_made += 1
+            for j in data.get("jobs", []):
+                jid = str(j.get("id") or j.get("link"))
+                out.setdefault(
+                    jid,
+                    JobPosting(
+                        source=self.key,
+                        external_id=jid,
+                        title=html_to_text(j.get("title")),
+                        company=(j.get("company") or "").strip(),
+                        url=j.get("link", ""),
+                        application_url=j.get("link"),
+                        description=html_to_text(j.get("snippet")),
+                        location=j.get("location") or None,
+                        employment_type=j.get("type") or None,
+                        salary_text=j.get("salary") or None,
+                        posted_at=parse_datetime(j.get("updated")),
+                        raw=j,
+                    ),
+                )
         return list(out.values())[:limit]
 
 

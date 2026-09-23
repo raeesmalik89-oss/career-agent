@@ -120,6 +120,12 @@ class JobDiscoveryAgent(Agent[DiscoveryInput]):
             with ThreadPoolExecutor(max_workers=6) as pool:
                 results = dict(pool.map(fetch, connectors))
             for src in sources:
+                used = getattr(connectors[src.key], "requests_made", 0)
+                if used:  # metered sources (Jooble) keep a running count of their request quota
+                    src.config = {
+                        **(src.config or {}),
+                        "requests_used": int((src.config or {}).get("requests_used", 0)) + used,
+                    }
                 postings = results[src.key]
                 if isinstance(postings, SourceError):
                     ctx.error("source_failed", f"{src.key}: {postings}", retryable=True)

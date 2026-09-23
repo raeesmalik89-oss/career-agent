@@ -123,6 +123,34 @@ def test_jooble_requires_key():
         Jooble(FakeHttp({}), {}).fetch(["devops"], 5)
 
 
+def test_jooble_uses_few_requests_and_respects_quota():
+    payload = {
+        "jobs": [
+            {
+                "id": 1,
+                "title": "DevOps Engineer",
+                "company": "Isb Co",
+                "link": "https://jooble.org/x",
+                "snippet": "Docker",
+                "location": "Islamabad",
+                "updated": "2026-09-20T00:00:00",
+            }
+        ]
+    }
+    http = FakeHttp({"https://jooble.org/api/": payload})
+    j = Jooble(http, {"api_key": "abcd-1234-efgh-5678"})
+    out = j.fetch(["devops engineer", "sre", "mlops", "cloud engineer", "ai engineer"], 50)
+    assert j.requests_made == 4 and len(http.calls) == 4 and out[0].location == "Islamabad"
+    limited = Jooble(
+        FakeHttp({"https://jooble.org/api/": payload}),
+        {"api_key": "abcd-1234-efgh-5678", "quota": 500, "requests_used": 498},
+    )
+    limited.fetch(["devops"], 50)
+    assert limited.requests_made == 2
+    with pytest.raises(SourceError, match="quota"):
+        Jooble(FakeHttp({}), {"api_key": "abcd-1234-efgh-5678", "requests_used": 500}).fetch(["devops"], 5)
+
+
 # ------------------------------------------------------------------ API
 
 
