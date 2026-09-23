@@ -49,6 +49,7 @@ export interface JobSummary {
   url: string;
   application_url: string | null;
   content_version: number;
+  summary_only: boolean;
   first_seen_at: string;
   last_seen_at: string;
 }

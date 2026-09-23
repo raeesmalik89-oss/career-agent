@@ -18,6 +18,7 @@ export const KNOCKOUT_LABELS: Record<string, string> = {
   visa: "No visa sponsorship",
   seniority: "Too senior",
   experience: "Too many years required",
+  unconfirmed: "Summary only",
 };
 
 export type Tone = "good" | "ok" | "warn" | "bad" | "muted";

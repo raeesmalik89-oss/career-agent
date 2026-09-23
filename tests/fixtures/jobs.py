@@ -11,7 +11,17 @@ def _date(days_ago: int) -> str:
     return (NOW - timedelta(days=days_ago)).isoformat()
 
 
-REQ = "Requirements:\n- {years} years of experience with {req}\n\nNice to have:\n- {nice}\n\nBenefits:\n- Laptop"
+# A neutral introduction (no skills, places or levels) so each mock reads as a full posting, not a summary.
+INTRO = (
+    "We are a small product company building tools that our customers rely on every day. You will join a friendly "
+    "team that cares about calm, well-documented work, clear ownership and steady delivery. Day to day you will "
+    "improve how our services are built, shipped and looked after, pair with colleagues on tricky problems, write "
+    "short design notes, and help new teammates find their feet. We value curiosity, kindness and good judgement."
+)
+REQ = (
+    INTRO + "\n\nRequirements:\n- {years} years of experience with {req}\n\nNice to have:\n- {nice}\n\n"
+    "Benefits:\n- Laptop"
+)
 
 # (title, company, location restriction, required skills, nice-to-have, years, salary, days ago)
 MOCK_SPECS = [

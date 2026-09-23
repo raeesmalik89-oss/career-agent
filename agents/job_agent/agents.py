@@ -15,7 +15,7 @@ from agents.resume_agent.agent import sync_taxonomy
 from agents.taxonomy import Taxonomy, get_taxonomy
 from app.core import crypto
 from app.db.enums import Confidence
-from app.db.models import JobRaw, JobSource, Secret
+from app.db.models import Job, JobRaw, JobSource, Secret
 from app.services import settings_service
 from integrations.sources.base import Connector, HttpClient, JobPosting, SourceError
 from integrations.sources.connectors import CONNECTORS
@@ -176,6 +176,7 @@ class JobDiscoveryAgent(Agent[DiscoveryInput]):
 
 class IngestInput(BaseModel):
     raw_ids: list[str]
+    target_job_id: uuid.UUID | None = None  # attach the posting(s) to this existing job
 
 
 class JobIngestAgent(Agent[IngestInput]):
@@ -196,6 +197,10 @@ class JobIngestAgent(Agent[IngestInput]):
         families: Counter = Counter()
         eligibility: Counter = Counter()
         job_ids: dict[str, list[str]] = {"new": [], "changed": [], "unchanged": [], "duplicate": []}
+        target = db.get(Job, payload.target_job_id) if payload.target_job_id else None
+        if payload.target_job_id and target is None:
+            ctx.error("job_not_found", f"job {payload.target_job_id} does not exist")
+            return {"statuses": {}, "unique_jobs": 0, "job_ids": job_ids}, None
         for rid in payload.raw_ids:
             raw = db.get(JobRaw, uuid.UUID(rid))
             if raw is None:
@@ -203,7 +208,7 @@ class JobIngestAgent(Agent[IngestInput]):
             src = db.get(JobSource, raw.source_id)
             p = posting_from_payload(raw.payload)
             try:
-                job, status = upsert_job(db, src, raw, p, self.taxonomy, skills)
+                job, status = upsert_job(db, src, raw, p, self.taxonomy, skills, target=target)
             except Exception as exc:  # noqa: BLE001 - one malformed posting must not stop the batch
                 ctx.error("ingest_failed", f"{src.key}:{raw.external_id}: {type(exc).__name__}: {exc}")
                 continue
@@ -265,8 +270,16 @@ def run_job_scan(
     }
 
 
-def ingest_manual(db, user_id: uuid.UUID, posting: JobPosting) -> dict:
-    """A job the user pasted: stored and analysed exactly like a fetched posting."""
+def ingest_manual(db, user_id: uuid.UUID, posting: JobPosting, job_id: uuid.UUID | None = None) -> dict:
+    """A job the user pasted: stored, analysed and scored exactly like a fetched posting.
+
+    With job_id, the text is the full posting of that existing job (e.g. one Jooble only summarised)."""
+    from agents.match_agent.agent import run_matching
+
     src = db.scalars(select(JobSource).where(JobSource.key == "manual")).one()
     raw, _ = store_raw(db, src, posting)
-    return JobIngestAgent().run(IngestInput(raw_ids=[str(raw.id)]), db, user_id=user_id).output
+    out = JobIngestAgent().run(IngestInput(raw_ids=[str(raw.id)], target_job_id=job_id), db, user_id=user_id).output
+    ids = [uuid.UUID(j) for js in out.get("job_ids", {}).values() for j in js]
+    if ids:
+        out["matching"] = run_matching(db, user_id, job_ids=ids).output
+    return out

@@ -8,7 +8,7 @@ import re
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 
-from agents.job_agent.extract import clearance_quote
+from agents.job_agent.extract import clearance_quote, is_summary
 from agents.match_agent.profile import TECH_FIELD_RX, CandidateProfile
 from agents.taxonomy import Taxonomy
 from app.schemas.settings import SENIORITY_LEVELS, UserSettings
@@ -82,6 +82,10 @@ class JobView:
     skills: list[JobSkillView]
     posted_date: date | None = None
     salary_known: bool = False
+
+    @property
+    def summary_only(self) -> bool:
+        return is_summary(self.description)
 
 
 @dataclass
@@ -406,6 +410,15 @@ def knockouts(job: JobView, profile: CandidateProfile, settings: UserSettings) -
                 "code": "experience",
                 "reason": f"Requires {job.experience_years:g}+ years; that is more than {mult:g}x your "
                 f"{profile.tech_years:g} verified years.",
+            }
+        )
+    if job.summary_only:
+        out.append(
+            {
+                "code": "unconfirmed",
+                "reason": f"Only a {len(job.description.strip())}-character summary of this posting is available, so "
+                "requirements such as years of experience and seniority cannot be checked. Paste the full posting "
+                "on the job page to score it properly.",
             }
         )
     return out

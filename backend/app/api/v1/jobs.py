@@ -8,6 +8,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from agents.job_agent.agents import ingest_manual, run_job_scan
+from agents.job_agent.extract import is_summary
 from app.core import crypto
 from app.db.enums import Actor, PkEligibility, RemoteType
 from app.db.models import Job, JobRaw, JobSkill, JobSource, JobSourceLink, Secret, Skill, User
@@ -37,6 +38,8 @@ class ManualJobIn(BaseModel):
     location: str | None = Field(None, max_length=300)
     remote: str | None = Field(None, pattern="^(remote|hybrid|onsite)$")
     salary_text: str | None = Field(None, max_length=200)
+    # The full text of a job we already have (e.g. Jooble gave only a summary). It becomes that job's posting.
+    job_id: uuid.UUID | None = None
 
 
 class SecretIn(BaseModel):
@@ -70,6 +73,7 @@ def _job_out(db: Session, job: Job, full: bool = False) -> dict:
         "url": job.url,
         "application_url": job.application_url,
         "content_version": job.content_version,
+        "summary_only": is_summary(job.description),
         "first_seen_at": job.first_seen_at.isoformat(),
         "last_seen_at": job.last_seen_at.isoformat(),
     }
@@ -164,7 +168,10 @@ def add_manual_job(
     db: Session = Depends(get_db),
     ctx: RequestCtx = Depends(request_ctx),
 ) -> dict:
-    """Paste a job you found yourself (LinkedIn, Rozee, a referral...). It is analysed like any other posting."""
+    """Paste a job you found yourself (LinkedIn, Rozee, a referral...), or the full text of a job we only have
+    as a summary (pass job_id). It is analysed and scored like any other posting."""
+    if body.job_id is not None and db.get(Job, body.job_id) is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "job not found")
     url = str(body.url) if body.url else ""
     ext = hashlib.sha256(f"{url}|{body.company}|{body.title}".encode()).hexdigest()[:32]
     posting = JobPosting(
@@ -180,7 +187,7 @@ def add_manual_job(
         posted_at=datetime.now(UTC),
         application_url=url or None,
     )
-    result = ingest_manual(db, user.id, posting)
+    result = ingest_manual(db, user.id, posting, job_id=body.job_id)
     job_id = next((ids[0] for ids in result["job_ids"].values() if ids), None)
     audit.record(
         db,
@@ -189,7 +196,11 @@ def add_manual_job(
         user_id=user.id,
         entity_type="jobs",
         entity_id=job_id,
-        after={"title": body.title, "company": body.company},
+        after={
+            "title": body.title,
+            "company": body.company,
+            "full_text_for": str(body.job_id) if body.job_id else None,
+        },
         request_id=ctx.request_id,
     )
     db.commit()

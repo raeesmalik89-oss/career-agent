@@ -60,12 +60,49 @@ def test_seniority(title, hint, years, level):
 
 
 @pytest.mark.parametrize(
+    "text, level",
+    [
+        ("- Have senior-level experience in platform security.", "senior"),
+        ("Staff level engineer mindset required", "staff"),
+        ("5+ years, including experience as a lead engineer", "senior"),
+        ("You will mentor junior engineers and learn from senior engineers.", None),
+    ],
+)
+def test_seniority_from_requirements(text, level):
+    got, evidence = X.classify_seniority("Platform Security Engineer", None, None, text)
+    assert got == level and (level is None or evidence.startswith("requirements: "))
+
+
+def test_title_beats_requirements_text():
+    assert X.classify_seniority("Junior DevOps Engineer", None, None, "senior-level experience")[0] == "junior"
+
+
+@pytest.mark.parametrize(
+    "text, summary",
+    [
+        ("...Technology Rivers is seeking a DevOps Engineer to own infrastructure...", True),
+        ("Short.", True),
+        ("(no description provided by the source)", True),
+        ("Requirements:\n" + "- Kubernetes and Terraform experience.\n" * 40, False),
+    ],
+)
+def test_is_summary(text, summary):
+    assert X.is_summary(text) is summary
+
+
+@pytest.mark.parametrize(
     "text, years",
     [
         ("3+ years of experience with Kubernetes", 3),
         ("5-7 years experience", 5),
         ("At least 2 years of hands-on DevOps experience; 4+ years experience preferred", 2),
         ("We were founded 10 years ago", None),
+        ("We have been around for 10+ years ago-style startups", None),
+        ("- Have 5+ years across infrastructure engineering, SRE, platform", 5),
+        ("At least 3 years in a DevOps role", 3),
+        ("Minimum of 4 years working with Kubernetes", 4),
+        ("2 or more years building CI/CD pipelines", 2),
+        ("Our 20-year history and 3 offices", None),
     ],
 )
 def test_years(text, years):

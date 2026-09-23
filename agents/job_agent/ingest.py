@@ -10,7 +10,7 @@ from decimal import Decimal
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from agents.job_agent.extract import JobAnalysis, analyze
+from agents.job_agent.extract import JobAnalysis, analyze, is_summary
 from agents.taxonomy import Taxonomy
 from app.db.enums import PkEligibility, RemoteType, Requirement
 from app.db.models import Job, JobRaw, JobSkill, JobSource, JobSourceLink, Skill
@@ -92,18 +92,31 @@ def find_existing(db: Session, p: JobPosting, fp: str, window_days: int = 45) ->
 
 
 def upsert_job(
-    db: Session, source: JobSource, raw: JobRaw, p: JobPosting, taxonomy: Taxonomy, skills: dict[str, Skill]
+    db: Session,
+    source: JobSource,
+    raw: JobRaw,
+    p: JobPosting,
+    taxonomy: Taxonomy,
+    skills: dict[str, Skill],
+    target: Job | None = None,
 ) -> tuple[Job, str]:
-    """Returns (job, status) where status is new | changed | unchanged | duplicate."""
+    """Returns (job, status) where status is new | changed | unchanged | duplicate.
+
+    `target` attaches the posting to a known job (the user pasted the full text of that job)."""
     a = analyze(p, taxonomy)
     fp = fingerprint(p.company, p.title)
-    job = find_existing(db, p, fp)
+    job = target or find_existing(db, p, fp)
     now = datetime.now(UTC)
     status = "new"
     if job is not None:
         linked = db.get(JobSourceLink, (job.id, raw.id)) is not None
         primary = _primary_posting(db, job)
-        if primary is None or (primary.source_id, primary.external_id) != (source.id, raw.external_id):
+        takes_over = primary is not None and _raw_is_summary(primary) and not is_summary(p.description)
+        if takes_over:
+            # The full posting replaces a summary: its requirements are now known, so the job is re-evaluated.
+            job.content_version += 1
+            status = "changed"
+        elif primary is None or (primary.source_id, primary.external_id) != (source.id, raw.external_id):
             # Same vacancy on another board, or another location variant on the same board. Only the posting
             # that created the job may change it; the others add provenance and fill gaps.
             status = "duplicate"
@@ -134,6 +147,10 @@ def upsert_job(
         db.add(job)
 
     _apply(db, job, p, a, skills)
+    if status == "changed" and primary is not None and primary.id != raw.id and _raw_is_summary(primary):
+        # keep what only the summary's source knew (e.g. Jooble's country tag deciding eligibility)
+        old = _posting(primary)
+        _fill_gaps(job, old, analyze(old, taxonomy), bump=False)
     if status == "new":
         db.add(JobSourceLink(job_id=job.id, raw_id=raw.id, source_id=source.id, url=p.url[:1000]))
         db.flush()
@@ -229,14 +246,21 @@ def _previous_version(db: Session, job: Job, source: JobSource, raw: JobRaw) -> 
 
 
 def _primary_posting(db: Session, job: Job) -> JobRaw | None:
-    """The earliest raw posting linked to the job: its (source, external id) owns the job's fields."""
-    return db.scalars(
+    """The posting that owns the job's fields: the earliest full-text one, else the earliest summary.
+
+    A summary (e.g. Jooble's ~280-character teaser) hides requirements such as years of experience, so a full
+    copy of the same vacancy from any board, or pasted by the user, takes over as soon as it exists."""
+    raws = db.scalars(
         select(JobRaw)
         .join(JobSourceLink, JobSourceLink.raw_id == JobRaw.id)
         .where(JobSourceLink.job_id == job.id)
         .order_by(JobRaw.fetched_at, JobRaw.id)
-        .limit(1)
-    ).first()
+    ).all()
+    return next((r for r in raws if not _raw_is_summary(r)), raws[0] if raws else None)
+
+
+def _raw_is_summary(raw: JobRaw) -> bool:
+    return is_summary((raw.payload.get("posting") or {}).get("description"))
 
 
 def _fill_gaps(job: Job, p: JobPosting, a: JobAnalysis, bump: bool = True) -> None:

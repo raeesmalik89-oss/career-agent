@@ -4,7 +4,9 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useState } from "react";
 import { Breakdown, EligibilityBadge, ScoreBlock } from "@/components/match";
-import { Badge, Card, CardHeader, Disclaimer, ErrorNote, Loading, PageHeader } from "@/components/ui";
+import { useIsOwner } from "@/components/shell";
+import { Badge, Button, Card, CardHeader, Disclaimer, ErrorNote, Loading, PageHeader } from "@/components/ui";
+import { ApiError, api } from "@/lib/api";
 import { KNOCKOUT_LABELS, daysAgo, fmtSalary, humanize } from "@/lib/format";
 import type { JobFull, MatchFull } from "@/lib/types";
 import { useApi } from "@/lib/use-api";
@@ -155,6 +157,16 @@ export default function JobPage() {
         </div>
       )}
 
+      {job.summary_only && (
+        <PasteFullPosting
+          job={job}
+          onDone={async () => {
+            await match.reload();
+            await jobOnly.reload();
+          }}
+        />
+      )}
+
       <Card className="mt-6">
         <CardHeader
           title="Posting text"
@@ -214,6 +226,70 @@ function JobFacts({ job, salary }: { job: JobFull; salary: string | null }) {
           </div>
         ))}
       </dl>
+    </Card>
+  );
+}
+
+function PasteFullPosting({ job, onDone }: { job: JobFull; onDone: () => Promise<void> }) {
+  const owner = useIsOwner();
+  const [text, setText] = useState("");
+  const [url, setUrl] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<ApiError | null>(null);
+  if (!owner) return null;
+
+  async function save() {
+    setBusy(true);
+    setErr(null);
+    try {
+      await api.post("/api/v1/jobs/manual", {
+        job_id: job.id,
+        title: job.title,
+        company: job.company,
+        description: text,
+        location: job.location ?? undefined,
+        remote: ["remote", "hybrid", "onsite"].includes(job.remote_type) ? job.remote_type : undefined,
+        url: url.trim() || undefined,
+      });
+      setText("");
+      await onDone();
+    } catch (e) {
+      setErr(e as ApiError);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card className="mt-6 border-warn/40">
+      <CardHeader
+        title="Only a summary of this posting is available"
+        sub="Requirements such as years of experience cannot be checked from a summary, so this job is not shown as a match. Open the employer's own posting, copy the whole text, and paste it here to score it properly."
+      />
+      <div className="space-y-2 px-4 py-3">
+        <textarea
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          rows={8}
+          placeholder="Paste the full job description here…"
+          aria-label="Full job description"
+          className="w-full rounded-md border border-border bg-bg p-2 text-sm"
+        />
+        <input
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+          placeholder="Link to the employer's posting (optional)"
+          aria-label="Link to the employer's posting"
+          className="h-9 w-full rounded-md border border-border bg-bg px-3 text-sm"
+        />
+        <ErrorNote error={err} />
+        <Button variant="primary" disabled={busy || text.trim().length < 500} onClick={save}>
+          {busy ? "Scoring…" : "Use this text and re-score"}
+        </Button>
+        {text.trim().length > 0 && text.trim().length < 500 && (
+          <p className="text-xs text-muted">That looks like a summary too; paste the whole posting.</p>
+        )}
+      </div>
     </Card>
   );
 }

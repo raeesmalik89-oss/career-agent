@@ -138,11 +138,34 @@ def classify_role(title: str) -> str | None:
     return None
 
 
-def classify_seniority(title: str, hint: str | None, years: float | None) -> tuple[str | None, str | None]:
+# Seniority stated in the requirements rather than the title, e.g. "Have senior-level experience in ...".
+SENIORITY_TEXT_RX = re.compile(
+    r"\b(senior|staff|principal)[- ]level (?:experience|engineer|background)|"
+    r"\bexperience (?:as|at the level of) an? (senior|staff|principal|lead) (?:engineer|developer)",
+    re.I,
+)
+SUMMARY_MAX_CHARS = 500
+
+
+def is_summary(text: str | None) -> bool:
+    """True for a teaser rather than the full posting (Jooble gives ~280 characters wrapped in '...').
+
+    Requirements such as years of experience cannot be checked from a summary."""
+    t = (text or "").strip()
+    return len(t) < SUMMARY_MAX_CHARS or t.startswith(("...", "…")) or t.endswith(("...", "…"))
+
+
+def classify_seniority(
+    title: str, hint: str | None, years: float | None, requirements: str | None = None
+) -> tuple[str | None, str | None]:
     for rx, level in SENIORITY_RULES:
         m = re.search(rx, title, re.I)
         if m:
             return level, f"title: '{m.group(0)}'"
+    m = SENIORITY_TEXT_RX.search(requirements or "")
+    if m:
+        word = (m.group(1) or m.group(2)).lower()
+        return ("senior" if word == "lead" else word), f"requirements: '{m.group(0)}'"
     if hint:
         h = hint.lower()
         for word, level in (
@@ -179,10 +202,23 @@ def split_sections(text: str) -> dict[str, str]:
     return {k: "\n".join(v) for k, v in buckets.items()}
 
 
+# "5+ years across infrastructure engineering", "at least 3 years in DevOps": no word "experience", so the
+# requirement must be explicit (+, "or more", "at least", "minimum") to avoid "founded 10 years ago".
+YEARS_OPEN_RX = re.compile(
+    r"(?:\b(?:at least|minimum(?: of)?)\s+(\d{1,2})\s*\+?\s*years?|\b(\d{1,2})\s*(?:\+|plus\b|or more\b)\s*years?)"
+    r"(?!\s+ago)\b[^.\n]{0,60}",
+    re.I,
+)
+
+
 def extract_years(text: str) -> tuple[float | None, str | None]:
     found = []
     for m in YEARS_RX.finditer(text):
         lo = int(m.group(1))
+        if 0 < lo <= 20:
+            found.append((lo, m.group(0).strip()))
+    for m in YEARS_OPEN_RX.finditer(text):
+        lo = int(m.group(1) or m.group(2))
         if 0 < lo <= 20:
             found.append((lo, m.group(0).strip()))
     if not found:
@@ -325,7 +361,7 @@ def analyze(p: JobPosting, taxonomy: Taxonomy) -> JobAnalysis:
     years, years_quote = extract_years(sections["required"] or p.description)
     if years is None:
         years, years_quote = extract_years(p.description)
-    seniority, sen_ev = classify_seniority(p.title, p.seniority_hint, years)
+    seniority, sen_ev = classify_seniority(p.title, p.seniority_hint, years, sections["required"] or p.description)
     remote, remote_ev = remote_type(p)
     elig, elig_ev = pk_eligibility(p, remote)
     smin, smax, scur, stext = extract_salary(p)
