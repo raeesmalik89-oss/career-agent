@@ -122,7 +122,8 @@ def get_match(job_id: uuid.UUID, user: User = Depends(any_user), db: Session = D
     )
     if m is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "no match for this job yet; run POST /matches/run")
-    return _match_out(m, job, db, full=True)
+    settings, _ = settings_service.get_effective(db, user.id)
+    return _match_out(m, job, db, full=True) | {"threshold": settings.preferences.min_fit_score}
 
 
 @router.post("/matches/run")

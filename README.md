@@ -15,8 +15,8 @@ The design is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 | 3 | GitHub Analyzer | ✅ done |
 | 4 | Job Search Engine | ✅ done |
 | 5 | Matching Engine | ✅ done |
-| 6 | Dashboard | next |
-| 7 | Application Engine | |
+| 6 | Dashboard | ✅ done |
+| 7 | Application Engine | next |
 | 8 | Interview Coach | |
 | 9 | Skill Gap + Concept Maps | |
 | 10 | Scheduler + Notifications | |
@@ -73,6 +73,15 @@ The design is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 - **Never re-shown**: there is one match per job *version*. Re-scoring after a profile or Settings change updates that match in place and keeps its "seen" state. Only a material change to the posting creates a new, unseen match.
 - **Stored per match**: component points and explanations, evidence (fact IDs and GitHub repos), missing and partial skills, risks, knockouts and a recommendation.
 
+### What Milestone 6 contains
+- **Web dashboard** (`frontend/`, Next.js 16 + TypeScript + Tailwind). Pages: Dashboard, Matches, All jobs, Job detail, Profile & facts, GitHub, Settings, Activity. Light and dark themes; works at phone width.
+- **Matches**: jobs at or above your threshold, all eligible jobs, or everything including hidden ones with the knockout reason. Each shows the score with its confidence and disclaimer, missing and partial skills, risks and a recommendation. You can mark matches seen or dismiss them.
+- **Job detail**: every score component with its explanation, a per-skill evidence table (credit, basis, the repos that back it), why it matches or not, and the posting's facts with the quoted Pakistan-eligibility evidence. The posting text is shown as plain text (it is untrusted).
+- **Fact review**: verify, reject or restore each fact, verify several ticked facts at once (facts with conflicts or that you rejected are skipped), and resolve conflicts by picking the value that is right. Rejecting a skill or editing experience recomputes your skill levels.
+- **Settings** with live validation (weights must add up to 100), then a one-click re-score. **Activity** shows the append-only audit log and every agent run.
+- **Security**: the browser only talks to the dashboard's origin. `/api` is proxied to FastAPI, so the httpOnly SameSite=strict session cookies are used and page JavaScript never sees a token. Includes CSP, `X-Frame-Options: DENY`, `no-referrer`, and a redirect after login that only allows same-site paths.
+- New API: `GET /api/v1/dashboard`, `POST /api/v1/profile/facts/verify-bulk`.
+
 ## API (so far)
 
 | Method | Path | Role |
@@ -94,6 +103,8 @@ The design is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 | GET | `/api/v1/matches` (min_score, new_only, include_hidden, include_dismissed) · `/api/v1/jobs/{id}/match` | any |
 | POST | `/api/v1/matches/run` · `/api/v1/matches/seen` · `/api/v1/matches/{id}/dismiss` | owner |
 | PUT | `/api/v1/secrets` (stored encrypted, never returned) | owner |
+| GET | `/api/v1/dashboard` | any |
+| POST | `/api/v1/profile/facts/verify-bulk` | owner |
 | GET | `/api/v1/audit-logs` · `/api/v1/agent-runs` | owner |
 | GET | `/healthz` · `/readyz` · `/metrics` · `/docs` (dev only) | – |
 
@@ -127,6 +138,15 @@ cd "/mnt/e/Users/Acer/Desktop/MY WORK/career-agent"
 export UV_PROJECT_ENVIRONMENT=.venv-linux   # keep WSL's environment separate from the Windows .venv
 uv sync && uv run pytest
 PYTHONPATH=backend:. uv run uvicorn app.main:app --app-dir backend --host 127.0.0.1 --port 8000
+```
+
+### Dashboard (Windows, Node 24+)
+Start the API first (port 8000), then in a second terminal:
+```powershell
+cd frontend
+npm install
+npm run dev          # http://localhost:3000  (set BACKEND_URL if the API is not on 127.0.0.1:8000)
+npm test             # unit tests;  npx tsc --noEmit  type check;  npx next build  production build
 ```
 
 ### WSL / Linux with Docker (full stack)

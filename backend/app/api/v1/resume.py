@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from agents.resume_agent.agent import DocumentInput, ResumeAnalyzerAgent, ResumeAnalyzerInput
 from agents.resume_agent.parsing import MAX_BYTES, SUPPORTED
 from agents.resume_agent.report import build_report
+from agents.skill_levels import recompute_user_skills
 from agents.taxonomy import get_taxonomy
 from app.db.enums import Actor, Confidence, FactType, ReviewStatus, SourceType
 from app.db.models import ProfileFact, ResumeVersion, User
@@ -72,6 +73,16 @@ def _fact_out(f: ProfileFact) -> FactOut:
         id=str(f.id), fact_type=f.fact_type.value, fact_key=f.fact_key, data=f.data, source_type=f.source_type.value,
         source_ref=f.source_ref, review_status=f.review_status.value, confidence=f.confidence.value,
     )  # fmt: skip
+
+
+class BulkVerifyIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    fact_ids: list[uuid.UUID] = Field(min_length=1, max_length=500)
+
+
+# Facts whose edits or rejection change skill levels (and therefore match scores).
+SKILL_FACT_TYPES = {"skill_claim", "experience", "project"}
 
 
 def _own_fact(db: Session, user: User, fact_id: uuid.UUID) -> ProfileFact:
@@ -184,6 +195,8 @@ def patch_fact(fact_id: uuid.UUID, body: FactPatch, user: User = Depends(owner_o
         f.data = {k: v for k, v in f.data.items() if k != "conflicts"}
     if body.review_status is not None:
         f.review_status = body.review_status
+    if f.fact_type.value in SKILL_FACT_TYPES and (body.data is not None or body.review_status is not None):
+        recompute_user_skills(db, user.id, get_taxonomy())
     audit.record(db, action="fact.update", actor=Actor.user, user_id=user.id, entity_type="profile_facts",
                  entity_id=f.id, before=before, after={"data": f.data, "review_status": f.review_status.value},
                  reason=body.note, request_id=ctx.request_id)  # fmt: skip
@@ -204,3 +217,29 @@ def verify_fact(fact_id: uuid.UUID, user: User = Depends(owner_only), db: Sessio
                  request_id=ctx.request_id)  # fmt: skip
     db.commit()
     return _fact_out(f)
+
+
+@router.post("/profile/facts/verify-bulk")
+def verify_bulk(body: BulkVerifyIn, user: User = Depends(owner_only), db: Session = Depends(get_db),
+                ctx: RequestCtx = Depends(request_ctx)) -> dict:  # fmt: skip
+    """Verify the facts you ticked. Facts with unresolved conflicts or that you rejected are skipped, not verified."""
+    wanted = set(body.fact_ids)
+    found = {f.id: f for f in db.scalars(select(ProfileFact).where(ProfileFact.user_id == user.id,
+                                                                  ProfileFact.id.in_(wanted)))}  # fmt: skip
+    verified, skipped = [], []
+    for fid in body.fact_ids:
+        f = found.get(fid)
+        if f is None:
+            skipped.append({"id": str(fid), "reason": "not found"})
+        elif f.data.get("conflicts"):
+            skipped.append({"id": str(fid), "reason": "resolve conflicts first"})
+        elif f.review_status == ReviewStatus.rejected:
+            skipped.append({"id": str(fid), "reason": "rejected; restore it first"})
+        elif f.review_status != ReviewStatus.verified:
+            f.review_status = ReviewStatus.verified
+            verified.append(str(fid))
+            audit.record(db, action="fact.verify", actor=Actor.user, actor_detail="bulk", user_id=user.id,
+                         entity_type="profile_facts", entity_id=f.id, before={"review_status": "pending"},
+                         after={"review_status": "verified"}, request_id=ctx.request_id)  # fmt: skip
+    db.commit()
+    return {"verified": verified, "skipped": skipped}

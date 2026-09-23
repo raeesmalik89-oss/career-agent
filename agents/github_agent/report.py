@@ -122,7 +122,7 @@ def build_github_report(db: Session, user_id: uuid.UUID, taxonomy: Taxonomy) -> 
                     "skill": key,
                     "name": f.data["name"],
                     "resume_evidence": f.data.get("evidence"),
-                    "detail": f"Claimed on resume. {EVIDENCE_NOT_FOUND} on GitHub (code/config).",
+                    "detail": f"Claimed on resume. No code or config on GitHub uses it. {EVIDENCE_NOT_FOUND}",
                 }
             )
     for key, g in gh.items():
