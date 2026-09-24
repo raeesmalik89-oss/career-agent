@@ -330,6 +330,9 @@ def approve(db: Session, app: Application) -> None:
     _event(db, app, "approved", Actor.user)
     # MVP: assisted apply. You open the application page, paste the approved answers and upload the resume.
     app.status = ApplicationStatus.awaiting_manual_submit
+    # an employer link added after the package was prepared wins over the stored (often aggregator) link
+    job = db.get(Job, app.job_id)
+    app.application_url = (job.employer_url if job else None) or app.application_url
     _event(db, app, "awaiting_manual_submit", Actor.system, url=app.application_url)
 
 
