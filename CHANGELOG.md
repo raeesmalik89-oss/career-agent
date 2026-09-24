@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.1.0 (2026-09-24)
+
+- **Tailor my CV** (new page): paste any job and get a CV and cover letter tailored to it. The job is saved and scored, a package is built from your facts, and it is optionally rewritten by AI.
+- **Free AI rewriting**, with the provider chosen in Settings → AI: **Groq**, **Google Gemini** (both free API keys) or **Ollama** (runs on this computer). The AI rewrites the summary, bullets, cover letter and a "why this company" draft. **Every AI line is re-validated**: a skill, tool or number that your cited facts don't support is discarded, your original wording is kept, and the reason is shown. Contact details are never sent to the AI. "Rewrite with AI" and "Rebuild from facts" (undo) are on every application.
+- Keys are stored encrypted (`groq_api_key`, `gemini_api_key`), with a **Test AI** button. Rate limits apply, and the AI endpoints are limited to known hosts (Ollama only on localhost).
+- Redesigned dashboard: sidebar navigation, indigo/slate theme, Inter, fit-score gauges, a new sign-in page.
+- Migration `0007` (AI settings).
+
 ## 1.0.1 (2026-09-24)
 
 First release with every CI check green on GitHub (lint, gitleaks, pip-audit, SQLite and PostgreSQL tests,

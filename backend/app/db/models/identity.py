@@ -67,5 +67,6 @@ class SettingsVersion(IdMixin, TimestampMixin, Base):
     policy: Mapped[dict] = mapped_column(JSONType, nullable=False)
     schedules: Mapped[dict] = mapped_column(JSONType, nullable=False)
     notifications: Mapped[dict | None] = mapped_column(JSONType)  # added in 0005; older rows use defaults
+    ai: Mapped[dict | None] = mapped_column(JSONType)  # added in 0007
 
     __table_args__ = (UniqueConstraint("user_id", "version"),)

@@ -19,7 +19,14 @@ from app.services import audit
 from integrations.sources.base import JobPosting
 
 router = APIRouter(tags=["jobs"])
-SECRET_NAMES = {"jooble_api_key", "github_token", "smtp_password", "telegram_bot_token"}
+SECRET_NAMES = {
+    "jooble_api_key",
+    "github_token",
+    "smtp_password",
+    "telegram_bot_token",
+    "groq_api_key",
+    "gemini_api_key",
+}
 
 
 class ScanIn(BaseModel):

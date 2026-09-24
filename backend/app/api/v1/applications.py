@@ -2,18 +2,20 @@ import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, HttpUrl
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from agents.application_agent import service
+from agents.application_agent.ai_tailor import AiTailorError, ai_config, tailor
 from agents.application_agent.docx_render import safe_filename
 from agents.application_agent.service import ApplicationError
+from agents.job_agent.agents import ingest_manual
 from app.api.v1.jobs import _job_out
 from app.db.enums import Actor, ApplicationStatus
 from app.db.models import Application, ApplicationAnswer, ApplicationEvent, Job, JobMatch, ResumeVersion, User
 from app.db.session import get_db
-from app.deps import RequestCtx, any_user, owner_only, request_ctx
+from app.deps import RequestCtx, any_user, owner_only, rate_limit, request_ctx
 from app.services import audit, storage
 
 router = APIRouter(tags=["applications"])
@@ -30,6 +32,18 @@ class AnswerIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     answer: str = Field(max_length=10_000)
+
+
+class TailorIn(BaseModel):
+    """A job you found anywhere: paste it and get a tailored package (AI-rewritten when AI is on)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    title: str = Field(min_length=2, max_length=300)
+    company: str = Field(min_length=1, max_length=300)
+    description: str = Field(min_length=100, max_length=50_000)
+    url: HttpUrl | None = None
+    use_ai: bool = True
 
 
 class RejectIn(BaseModel):
@@ -91,6 +105,7 @@ def _detail(db: Session, app: Application) -> dict:
         "resume": rv.parsed.get("resume") if rv else None,
         "resume_filename": rv.original_filename if rv else None,
         "resume_validation": app.policy_decision.get("resume_validation"),
+        "ai": app.policy_decision.get("ai"),
         "policy": {k: app.policy_decision.get(k) for k in ("prepare", "submission")},
         "blockers": service._blockers(db, app) if app.status in service.PRE_SUBMIT else [],
         "answers": [
@@ -103,6 +118,7 @@ def _detail(db: Session, app: Application) -> dict:
                 "validation_notes": a.validation_notes,
                 "cited_fact_ids": a.cited_fact_ids,
                 "approved": a.approved_by_user_at is not None,
+                "ai": bool(app.policy_decision.get("answers_meta", {}).get(str(a.id), {}).get("ai")),
             }
             for a in answers
         ],
@@ -241,3 +257,64 @@ def cover_letter_docx(app_id: uuid.UUID, user: User = Depends(any_user), db: Ses
         media_type=DOCX,
         headers={"Content-Disposition": f'attachment; filename="{name}"'},
     )
+
+
+@router.post("/applications/{app_id}/ai-tailor", dependencies=[Depends(rate_limit("ai_tailor", 6))])
+def ai_tailor(app_id: uuid.UUID, user: User = Depends(owner_only), db: Session = Depends(get_db),
+              ctx: RequestCtx = Depends(request_ctx)) -> dict:  # fmt: skip
+    """Rewrite this package with the AI chosen in Settings. Lines the validator rejects keep your wording."""
+    app = _own(db, user, app_id)
+    try:
+        report = tailor(db, app)
+    except AiTailorError as e:
+        db.rollback()
+        raise HTTPException(e.status, e.message) from None
+    _audit(db, user, ctx, "application.ai_tailor", app, provider=report["provider"], model=report["model"],
+           rewritten=report["lines_rewritten"], kept_original=len(report["kept_original"]))  # fmt: skip
+    db.commit()
+    return _detail(db, app)
+
+
+@router.post("/tailor", status_code=status.HTTP_201_CREATED, dependencies=[Depends(rate_limit("tailor", 6))])
+def tailor_pasted_job(body: TailorIn, user: User = Depends(owner_only), db: Session = Depends(get_db),
+                      ctx: RequestCtx = Depends(request_ctx)) -> dict:  # fmt: skip
+    """Paste a job -> it is stored and scored -> a package is prepared from your facts -> the AI rewrites it.
+    Nothing is sent to the employer. If the AI step fails, the fact-based package is still there."""
+    import hashlib
+    from datetime import UTC, datetime
+
+    from integrations.sources.base import JobPosting
+
+    url = str(body.url) if body.url else ""
+    posting = JobPosting(
+        source="manual",
+        external_id=hashlib.sha256(f"{url}|{body.company}|{body.title}".encode()).hexdigest()[:32],
+        title=body.title,
+        company=body.company,
+        url=url,
+        description=body.description,
+        posted_at=datetime.now(UTC),
+        application_url=url or None,
+    )
+    result = ingest_manual(db, user.id, posting)
+    job_id = next((ids[0] for ids in result["job_ids"].values() if ids), None)
+    if job_id is None:
+        db.rollback()
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "could not read this job posting")
+    try:
+        app = service.prepare(db, user.id, uuid.UUID(str(job_id)))
+    except ApplicationError as e:
+        if not e.existing_id:
+            db.rollback()
+            return _raise(e)
+        app = db.get(Application, e.existing_id)  # already prepared for this job: tailor that one
+    ai_report, ai_error = None, None
+    if body.use_ai and ai_config(db, user.id)[0] is not None and app.status in service.PRE_SUBMIT:
+        try:
+            ai_report = tailor(db, app)
+        except AiTailorError as e:
+            ai_error = e.message
+    _audit(db, user, ctx, "application.tailor_pasted", app, job_id=str(job_id), company=body.company,
+           ai=bool(ai_report), ai_error=ai_error)  # fmt: skip
+    db.commit()
+    return {"application_id": str(app.id), "job_id": str(job_id), "ai_report": ai_report, "ai_error": ai_error}

@@ -183,11 +183,22 @@ export interface ApplicationSummary {
 export interface ResumeItem {
   text: string;
   fact_ids: string[];
+  ai?: boolean; // rewritten by AI (and passed the validator)
+  original?: string; // the fact-based wording it replaced
+}
+
+export interface AiReport {
+  provider: string;
+  model: string;
+  seconds: number;
+  lines_rewritten: number;
+  kept_original: { part: string; ai_text?: string; reason: string[] }[];
+  tokens: Record<string, number>;
 }
 
 export interface TailoredResume {
   header: Record<string, ResumeItem>;
-  summary: { text: string } | null;
+  summary: { text: string; ai?: boolean; original?: string | null } | null;
   skills: { group: string; items: (ResumeItem & { skill: string })[] }[];
   experience: { title: string; organization: string; dates: string; note: string | null; bullets: ResumeItem[]; conflicts: boolean }[];
   projects: { name: string; technologies: string[]; repo: string | null; bullets: ResumeItem[] }[];
@@ -217,6 +228,7 @@ export interface ApplicationAnswerRow {
   validation_notes: string[];
   cited_fact_ids: string[];
   approved: boolean;
+  ai?: boolean;
 }
 
 export interface ApplicationDetail extends ApplicationSummary {
@@ -224,6 +236,7 @@ export interface ApplicationDetail extends ApplicationSummary {
   resume: TailoredResume | null;
   resume_filename: string | null;
   resume_validation: { items: CheckItem[]; counts: Record<string, number> } | null;
+  ai: AiReport | null;
   policy: { prepare: PolicyTrace | null; submission: PolicyTrace | null };
   blockers: string[];
   answers: ApplicationAnswerRow[];
@@ -442,4 +455,19 @@ export interface DailyReportDoc {
   generated_at: string;
   metrics: Record<string, unknown>;
   content_md: string;
+}
+
+export interface AiStatus {
+  provider: "off" | "groq" | "gemini" | "ollama";
+  model: string | null;
+  ready: boolean;
+  providers: {
+    key: "groq" | "gemini" | "ollama";
+    label: string;
+    default_model: string;
+    needs_key: boolean;
+    secret_name: string | null;
+    key_stored: boolean | null;
+    privacy: string;
+  }[];
 }

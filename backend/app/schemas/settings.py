@@ -163,12 +163,22 @@ class Notifications(Strict):
         return self
 
 
+class AiSettings(Strict):
+    """Optional AI rewriting of tailored resumes and cover letters. Keys are secrets (groq_api_key, gemini_api_key),
+    never stored here. Every AI-written line is re-validated against your facts; unsupported lines are discarded."""
+
+    provider: Literal["off", "groq", "gemini", "ollama"] = "off"
+    model: str | None = Field(None, max_length=80, pattern=r"^[A-Za-z0-9._:/-]+$")
+    ollama_url: str = Field("http://127.0.0.1:11434", pattern=r"^http://(127\.0\.0\.1|localhost)(:\d{2,5})?/?$")
+
+
 class UserSettings(Strict):
     preferences: Preferences = Preferences()
     scoring_weights: ScoringWeights = ScoringWeights()
     policy: Policy = Policy()
     schedules: Schedules = Schedules()
     notifications: Notifications = Notifications()
+    ai: AiSettings = AiSettings()
 
 
 class UserSettingsOut(UserSettings):

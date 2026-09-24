@@ -14,6 +14,7 @@ const NAV: { group: string; items: { href: string; label: string; icon: IconName
   {
     group: "Job search",
     items: [
+      { href: "/tailor", label: "Tailor my CV", icon: "sparkles" },
       { href: "/matches", label: "Matches", icon: "target" },
       { href: "/jobs", label: "All jobs", icon: "briefcase" },
       { href: "/applications", label: "Applications", icon: "send" },

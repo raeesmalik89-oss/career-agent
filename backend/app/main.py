@@ -13,6 +13,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.api.v1 import (
+    ai,
     applications,
     auth,
     automation,
@@ -56,7 +57,7 @@ def create_app() -> FastAPI:
     max_body = s.max_request_mb * 1024 * 1024
     app = FastAPI(
         title="Career Agent API",
-        version="1.0.1",
+        version="1.1.0",
         docs_url="/docs" if s.app_env != "production" else None,
         redoc_url=None,
     )
@@ -129,6 +130,7 @@ def create_app() -> FastAPI:
         skills.router,
         ops.router,
         automation.router,
+        ai.router,
     ):
         app.include_router(r, prefix="/api/v1")
 

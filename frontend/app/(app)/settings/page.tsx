@@ -6,6 +6,7 @@ import { useIsOwner } from "@/components/shell";
 import { Button, Card, CardHeader, ErrorNote, Loading, PageHeader, cx } from "@/components/ui";
 import { ApiError, api } from "@/lib/api";
 import { COMPONENT_LABELS, humanize } from "@/lib/format";
+import type { AiStatus } from "@/lib/types";
 import { useApi } from "@/lib/use-api";
 
 const FAMILIES = ["devops", "cloud", "sre", "aiops", "ai_engineer", "ai_platform", "mlops", "devsecops", "kubernetes", "platform", "cloud_ai_infra", "sre_ai"];
@@ -46,6 +47,7 @@ interface SettingsDoc {
     catch_up_hours: number;
     auto_prepare: boolean;
   };
+  ai: { provider: "off" | "groq" | "gemini" | "ollama"; model: string | null; ollama_url: string };
   notifications: {
     dashboard_url: string;
     external_min_severity: "info" | "important" | "urgent";
@@ -315,11 +317,132 @@ export default function SettingsPage() {
           </div>
         </Card>
 
+        <AiSettingsCard ai={s.ai} setAi={(ai) => setS({ ...s, ai })} dirty={dirty} owner={owner} />
         <NotificationSettings s={s} ntf={ntf} num={num} dirty={dirty} owner={owner} />
       </fieldset>
       {!owner && <p className="mt-4 text-sm text-muted">Viewers can read settings but not change them.</p>}
       <AccountSecurity />
     </>
+  );
+}
+
+type AiDoc = SettingsDoc["ai"];
+
+const GET_KEY: Record<string, { url: string; how: string }> = {
+  groq: { url: "https://console.groq.com/keys", how: "Sign in at console.groq.com → API Keys → Create API Key (free)." },
+  gemini: { url: "https://aistudio.google.com/app/apikey", how: "Sign in at aistudio.google.com → Get API key → Create API key (free)." },
+};
+
+function AiSettingsCard({ ai, setAi, dirty, owner }: { ai: AiDoc; setAi: (a: AiDoc) => void; dirty: boolean; owner: boolean }) {
+  const status = useApi<AiStatus>(owner ? "/api/v1/ai/status" : null);
+  const [test, setTest] = useState<string | null>(null);
+  const [err, setErr] = useState<ApiError | null>(null);
+  const [testing, setTesting] = useState(false);
+  const chosen = status.data?.providers.find((p) => p.key === ai.provider);
+
+  async function runTest() {
+    setTesting(true);
+    setErr(null);
+    setTest(null);
+    try {
+      const r = await api.post<{ ok: boolean; model: string; seconds: number }>("/api/v1/ai/test");
+      setTest(r.ok ? `Connected: ${r.model} answered in ${r.seconds}s.` : "Connected, but the model's reply was unexpected.");
+    } catch (e) {
+      setErr(e as ApiError);
+    } finally {
+      setTesting(false);
+    }
+  }
+
+  const options: { key: AiDoc["provider"]; label: string; note: string }[] = [
+    { key: "off", label: "Off", note: "Fact-based tailoring only" },
+    { key: "groq", label: "Groq", note: "Free key · fast · recommended" },
+    { key: "gemini", label: "Google Gemini", note: "Free key · good quality" },
+    { key: "ollama", label: "Ollama", note: "On this PC · private · slow here" },
+  ];
+
+  return (
+    <Card className="lg:col-span-2">
+      <div id="ai" className="scroll-mt-20" />
+      <CardHeader
+        title="AI rewriting (free)"
+        sub="Rewrites your tailored CV and cover letter for each job. Every AI line is re-checked against your facts; anything unsupported is thrown away."
+        action={
+          owner && ai.provider !== "off" && (
+            <Button size="sm" onClick={runTest} disabled={dirty || testing}>
+              {dirty ? "Save before testing" : testing ? "Testing…" : "Test AI"}
+            </Button>
+          )
+        }
+      />
+      <div className="space-y-4 px-5 py-4 text-sm">
+        <div className="grid gap-2 sm:grid-cols-4" role="radiogroup" aria-label="AI provider">
+          {options.map((o) => (
+            <button
+              type="button"
+              key={o.key}
+              role="radio"
+              aria-checked={ai.provider === o.key}
+              onClick={() => setAi({ ...ai, provider: o.key, model: null })}
+              className={cx(
+                "rounded-lg border px-3 py-2.5 text-left transition",
+                ai.provider === o.key ? "border-accent bg-accent-soft ring-1 ring-accent" : "border-border hover:border-border-strong",
+              )}
+            >
+              <div className="font-medium">{o.label}</div>
+              <div className="text-xs text-muted">{o.note}</div>
+            </button>
+          ))}
+        </div>
+
+        {ai.provider !== "off" && chosen && (
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-3">
+              <Field label="Model" hint={`Leave empty for the default (${chosen.default_model}).`}>
+                <input
+                  className="h-8 w-full rounded-md border border-border bg-bg px-2 font-mono text-xs"
+                  placeholder={chosen.default_model}
+                  value={ai.model ?? ""}
+                  onChange={(e) => setAi({ ...ai, model: e.target.value.trim() || null })}
+                />
+              </Field>
+              {ai.provider === "ollama" && (
+                <Field label="Ollama address" hint="Only this computer is allowed. Install from ollama.com, then run: ollama pull llama3.2:3b">
+                  <input
+                    className="h-8 w-full rounded-md border border-border bg-bg px-2 font-mono text-xs"
+                    value={ai.ollama_url}
+                    onChange={(e) => setAi({ ...ai, ollama_url: e.target.value.trim() })}
+                  />
+                </Field>
+              )}
+              <p className="rounded-lg bg-surface-2 px-3 py-2 text-xs text-muted">{chosen.privacy}</p>
+            </div>
+            <div className="space-y-3">
+              {chosen.needs_key && chosen.secret_name && owner && (
+                <>
+                  <SecretInput
+                    name={chosen.secret_name}
+                    label={`${chosen.label} API key`}
+                    stored={chosen.key_stored ?? false}
+                    onSaved={status.reload}
+                  />
+                  {GET_KEY[chosen.key] && (
+                    <p className="text-xs text-muted">
+                      {GET_KEY[chosen.key].how}{" "}
+                      <a href={GET_KEY[chosen.key].url} target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">
+                        Open ↗
+                      </a>
+                    </p>
+                  )}
+                </>
+              )}
+              {test && <p className="text-xs text-good">{test}</p>}
+              <ErrorNote error={err} />
+            </div>
+          </div>
+        )}
+      </div>
+    </Card>
   );
 }
 

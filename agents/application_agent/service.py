@@ -161,6 +161,39 @@ def prepare(db: Session, user_id: uuid.UUID, job_id: uuid.UUID, *, requested_by_
     return app
 
 
+def store_resume(db: Session, app: Application, job: Job, resume: dict, *, ai: dict | None = None) -> ResumeVersion:
+    """Render the resume to DOCX, keep it as a tailored ResumeVersion and point the application at it."""
+    data = render_resume(resume)
+    sha = hashlib.sha256(data + str(app.id).encode()).hexdigest()
+    uri = storage.save_document(data, sha, ".docx")
+    rp = db.scalars(
+        select(ResumeProfile).where(ResumeProfile.user_id == app.user_id, ResumeProfile.is_active.is_(True))
+    ).first()
+    if rp is None:
+        raise ApplicationError(422, "import your resume first (no active resume profile)")
+    name = f"resume_{safe_filename(job.company, job.title)}.docx"
+    existing = db.scalars(
+        select(ResumeVersion).where(ResumeVersion.user_id == app.user_id, ResumeVersion.sha256 == sha)
+    ).first()
+    rv = existing or ResumeVersion(
+        user_id=app.user_id,
+        profile_id=rp.id,
+        kind=ResumeKind.tailored,
+        job_id=job.id,
+        label=f"{'AI-tailored' if ai else 'Tailored'} for {job.company}: {job.title}"[:200],
+        original_filename=name[:300],
+        file_uri=uri,
+        format=FileFormat.docx,
+        sha256=sha,
+    )
+    rv.parsed = {"resume": resume, **({"ai": ai} if ai else {})}
+    if existing is None:
+        db.add(rv)
+    db.flush()
+    app.resume_version_id = rv.id
+    return rv
+
+
 def _build(db: Session, app: Application, job: Job) -> None:
     """(Re)generate the resume, cover letter and answers for an application that is not yet approved."""
     user_id = app.user_id
@@ -173,34 +206,7 @@ def _build(db: Session, app: Application, job: Job) -> None:
     letter = build_cover_letter(db, user_id, view, profile, resume)
     answers = build_answers(db, user_id, view, profile, settings, resume)
 
-    data = render_resume(resume)
-    sha = hashlib.sha256(data + str(app.id).encode()).hexdigest()
-    uri = storage.save_document(data, sha, ".docx")
-    rp = db.scalars(
-        select(ResumeProfile).where(ResumeProfile.user_id == user_id, ResumeProfile.is_active.is_(True))
-    ).first()
-    if rp is None:
-        raise ApplicationError(422, "import your resume first (no active resume profile)")
-    name = f"resume_{safe_filename(job.company, job.title)}.docx"
-    existing = db.scalars(
-        select(ResumeVersion).where(ResumeVersion.user_id == user_id, ResumeVersion.sha256 == sha)
-    ).first()
-    rv = existing or ResumeVersion(
-        user_id=user_id,
-        profile_id=rp.id,
-        kind=ResumeKind.tailored,
-        job_id=job.id,
-        label=f"Tailored for {job.company}: {job.title}"[:200],
-        original_filename=name[:300],
-        file_uri=uri,
-        format=FileFormat.docx,
-        sha256=sha,
-    )
-    rv.parsed = {"resume": resume}
-    if existing is None:
-        db.add(rv)
-    db.flush()
-    app.resume_version_id = rv.id
+    rv = store_resume(db, app, job, resume)
 
     for old in db.scalars(select(ApplicationAnswer).where(ApplicationAnswer.application_id == app.id)):
         db.delete(old)
@@ -223,7 +229,8 @@ def _build(db: Session, app: Application, job: Job) -> None:
         db.add(ans)
         db.flush()
         meta[str(ans.id)] = {"derived": derived, "user_written": user_written}
-    app.policy_decision = {**app.policy_decision, "answers_meta": meta}
+    # a rebuild replaces any AI rewrite with the plain fact-based package
+    app.policy_decision = {**{k: v for k, v in app.policy_decision.items() if k != "ai"}, "answers_meta": meta}
     _event(db, app, "package_built", Actor.agent, resume_version=str(rv.id), answers=len(rows))
     revalidate(db, app)
 

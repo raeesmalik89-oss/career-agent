@@ -3,11 +3,12 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
+import { Icon } from "@/components/icons";
 import { useIsOwner } from "@/components/shell";
 import { Badge, Button, Card, CardHeader, ErrorNote, Loading, PageHeader, cx } from "@/components/ui";
 import { ApiError, api } from "@/lib/api";
 import { STATUS_TONE, fmtDateTime, fmtScore, humanize } from "@/lib/format";
-import type { ApplicationAnswerRow, ApplicationDetail, CheckItem } from "@/lib/types";
+import type { AiReport, AiStatus, ApplicationAnswerRow, ApplicationDetail, CheckItem } from "@/lib/types";
 import { useApi } from "@/lib/use-api";
 
 const CHECK_TONE = { valid: "good", needs_approval: "warn", unsupported: "bad" } as const;
@@ -18,8 +19,16 @@ export default function ApplicationPage() {
   const { id } = useParams<{ id: string }>();
   const owner = useIsOwner();
   const res = useApi<ApplicationDetail>(`/api/v1/applications/${id}`);
+  const ai = useApi<AiStatus>(owner ? "/api/v1/ai/status" : null);
   const [err, setErr] = useState<ApiError | null>(null);
   const [busy, setBusy] = useState(false);
+  const [aiBusy, setAiBusy] = useState(false);
+
+  async function rewriteWithAi() {
+    setAiBusy(true);
+    await act(() => api.post<ApplicationDetail>(`/api/v1/applications/${id}/ai-tailor`));
+    setAiBusy(false);
+  }
 
   async function act(fn: () => Promise<ApplicationDetail>) {
     setBusy(true);
@@ -96,7 +105,19 @@ export default function ApplicationPage() {
             <p className="text-sm text-good">Ready to approve. Approving does not send anything: you submit it yourself on the employer's site.</p>
           )}
           <div className="mt-3 flex flex-wrap gap-2">
-            <Button variant="primary" disabled={busy || a.blockers.length > 0} onClick={() => act(() => api.post(`/api/v1/applications/${a.id}/approve`))}>
+            {ai.data && ai.data.provider !== "off" ? (
+              <Button variant="primary" disabled={busy} onClick={rewriteWithAi} title={`Rewrite the resume and cover letter with ${ai.data.provider}`}>
+                <Icon name="sparkles" />
+                {aiBusy ? "AI is rewriting… (up to a minute)" : a.ai ? "Rewrite again with AI" : "Rewrite with AI"}
+              </Button>
+            ) : (
+              ai.data && (
+                <Link href="/settings#ai" className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-dashed border-border-strong px-4 text-sm font-medium text-muted hover:text-text">
+                  <Icon name="sparkles" /> Turn on free AI rewriting
+                </Link>
+              )
+            )}
+            <Button variant={a.ai || !ai.data || ai.data.provider === "off" ? "primary" : "secondary"} disabled={busy || a.blockers.length > 0} onClick={() => act(() => api.post(`/api/v1/applications/${a.id}/approve`))}>
               Approve package
             </Button>
             <Button
@@ -145,6 +166,7 @@ export default function ApplicationPage() {
         </div>
 
         <div className="space-y-4 lg:col-span-2">
+          {a.ai && <AiReportCard report={a.ai} />}
           <Card>
             <CardHeader
               title="Tailored resume"
@@ -232,6 +254,11 @@ function AnswerCard({
         <span className="font-medium">{ans.question}</span>
         <Badge>{humanize(ans.category)}</Badge>
         <Badge tone={CHECK_TONE[ans.validation_status]}>{CHECK_LABEL[ans.validation_status]}</Badge>
+        {ans.ai && (
+          <Badge tone="ok" title="Drafted by AI from your facts and the job posting. Read it and make it yours.">
+            ✨ AI draft
+          </Badge>
+        )}
         {ans.approved && <Badge tone="good">approved</Badge>}
         <button onClick={copy} className="ml-auto text-xs text-accent hover:underline" disabled={!ans.answer}>
           {copied ? "Copied" : "Copy"}
@@ -291,6 +318,12 @@ function ResumePreview({ resume, checks }: { resume: NonNullable<ApplicationDeta
         <p className="text-sm font-semibold">{h.name?.text}</p>
         <p className="text-muted">{["location", "email", "phone", "linkedin", "github"].filter((k) => h[k]).map((k) => h[k].text).join(" | ")}</p>
       </div>
+      {resume.summary && (
+        <p title={resume.summary.ai && resume.summary.original ? `Your original: ${resume.summary.original}` : undefined}>
+          {resume.summary.ai && <AiMark />}
+          <Line text={resume.summary.text} check={checks.get("summary")} />
+        </p>
+      )}
       {resume.skills.map((g, gi) => (
         <p key={g.group}>
           <span className="font-semibold">{g.group}: </span>
@@ -310,7 +343,8 @@ function ResumePreview({ resume, checks }: { resume: NonNullable<ApplicationDeta
             </p>
             <ul className="list-disc pl-4">
               {e.bullets.map((b, bi) => (
-                <li key={bi}>
+                <li key={bi} title={b.ai && b.original ? `Your original: ${b.original}` : undefined}>
+                  {b.ai && <AiMark />}
                   <Line text={b.text} check={checks.get(`experience.${ei}.bullets.${bi}`)} />
                 </li>
               ))}
@@ -326,7 +360,8 @@ function ResumePreview({ resume, checks }: { resume: NonNullable<ApplicationDeta
             </p>
             <ul className="list-disc pl-4">
               {p.bullets.map((b, bi) => (
-                <li key={bi}>
+                <li key={bi} title={b.ai && b.original ? `Your original: ${b.original}` : undefined}>
+                  {b.ai && <AiMark />}
                   <Line text={b.text} check={checks.get(`projects.${pi}.bullets.${bi}`)} />
                 </li>
               ))}
@@ -356,5 +391,60 @@ function Section({ title, children }: { title: string; children: React.ReactNode
       <p className="mb-1 font-semibold uppercase tracking-wide text-muted">{title}</p>
       <div className="space-y-2">{children}</div>
     </div>
+  );
+}
+
+function AiMark() {
+  return (
+    <span className="mr-1 inline-flex items-center rounded bg-accent-soft px-1 text-[10px] font-semibold text-accent" title="Rewritten by AI; hover the line to see your original">
+      AI
+    </span>
+  );
+}
+
+function AiReportCard({ report }: { report: AiReport }) {
+  const [open, setOpen] = useState(false);
+  const kept = report.kept_original;
+  return (
+    <Card className="border-accent/30">
+      <CardHeader
+        title={
+          <span className="flex items-center gap-2">
+            <Icon name="sparkles" className="h-4 w-4 text-accent" /> Rewritten with AI
+          </span>
+        }
+        sub={`${humanize(report.provider)} · ${report.model} · ${report.seconds}s`}
+      />
+      <div className="space-y-2 px-5 py-3 text-sm">
+        <p>
+          <span className="font-semibold text-good">{report.lines_rewritten}</span> line{report.lines_rewritten === 1 ? "" : "s"} rewritten and checked
+          against your facts.
+          {kept.length > 0 && (
+            <>
+              {" "}
+              <span className="font-semibold text-warn">{kept.length}</span> kept your original wording
+              {" "}
+              <button className="text-accent hover:underline" onClick={() => setOpen(!open)}>
+                {open ? "hide why" : "see why"}
+              </button>
+            </>
+          )}
+        </p>
+        {open && (
+          <ul className="space-y-2 text-xs">
+            {kept.map((k) => (
+              <li key={k.part} className="rounded-lg bg-surface-2 px-3 py-2">
+                <div className="font-medium">{humanize(k.part.replaceAll(".", " "))}</div>
+                {k.ai_text && <div className="mt-0.5 text-muted line-through decoration-bad/60">{k.ai_text}</div>}
+                <div className="mt-0.5 text-bad">{k.reason.join(" ")}</div>
+              </li>
+            ))}
+          </ul>
+        )}
+        <p className="text-xs text-muted">
+          Hover an <AiMark /> line to see your original. &quot;Rebuild from facts&quot; undoes the AI rewrite.
+        </p>
+      </div>
+    </Card>
   );
 }
