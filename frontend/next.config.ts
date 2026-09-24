@@ -21,6 +21,8 @@ const config: NextConfig = {
   poweredByHeader: false,
   // Self-contained server for the Docker image (frontend/Dockerfile); `npm run dev` is unaffected.
   output: "standalone",
+  // the dev-only Next.js badge would sit on top of the sidebar account card (bottom-left)
+  devIndicators: { position: "bottom-right" },
   async rewrites() {
     return [{ source: "/api/:path*", destination: `${BACKEND_URL}/api/:path*` }];
   },

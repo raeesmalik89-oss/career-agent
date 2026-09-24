@@ -139,11 +139,11 @@ function Sidebar({ me, pathname, onNavigate, onLogout }: { me: Me; pathname: str
     .toUpperCase();
   return (
     <div className="flex h-full flex-col bg-sidebar text-sidebar-text">
-      <Link href="/" onClick={onNavigate} className="flex items-center gap-2.5 px-5 pb-4 pt-5">
+      <Link href="/" onClick={onNavigate} className="flex items-center gap-2.5 px-5 pb-3 pt-5">
         <Logo />
         <span className="text-[15px] font-semibold tracking-tight text-white">Career Agent</span>
       </Link>
-      <nav className="flex-1 space-y-5 overflow-y-auto px-3 py-2" aria-label="Main">
+      <nav className="sidebar-scroll flex-1 space-y-4 overflow-y-auto px-3 py-1" aria-label="Main">
         {NAV.map((g) => (
           <div key={g.group || "top"}>
             {g.group && (
@@ -159,7 +159,7 @@ function Sidebar({ me, pathname, onNavigate, onLogout }: { me: Me; pathname: str
                       onClick={onNavigate}
                       aria-current={active ? "page" : undefined}
                       className={cx(
-                        "group relative flex items-center gap-3 rounded-lg px-3 py-2 text-[13.5px] font-medium transition",
+                        "group relative flex items-center gap-3 rounded-lg px-3 py-[7px] text-[13.5px] font-medium transition",
                         active ? "bg-sidebar-active text-white" : "text-sidebar-text/80 hover:bg-white/5 hover:text-white",
                       )}
                     >
