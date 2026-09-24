@@ -228,3 +228,75 @@ export interface ApplicationDetail extends ApplicationSummary {
   events: { type: string; actor: string; at: string; detail: Record<string, unknown> }[];
   next_statuses: string[];
 }
+
+export interface PackQuestion {
+  id: string;
+  bank_id: string | null;
+  question: string;
+  difficulty: string;
+  tests: string;
+  key_points: string[];
+  model_answer: string;
+  spoken_answer: string | null;
+  common_mistakes: string[];
+  follow_up: string;
+}
+
+export interface InterviewPack {
+  date: string;
+  total: number;
+  sections: { key: string; title: string; questions: PackQuestion[] }[];
+  disclaimer: string;
+}
+
+export interface NextQuestion {
+  question_id: string;
+  index: number;
+  total: number;
+  section: string;
+  section_title: string;
+  difficulty: string;
+  question: string;
+  tests: string;
+}
+
+export interface AnswerFeedback {
+  question_id: string;
+  question: string;
+  your_answer?: string;
+  score: number | null;
+  rubric?: Record<string, { points: number; max: number; note: string }>;
+  covered?: string[];
+  missing_concepts?: string[];
+  mistakes?: string[];
+  common_mistakes?: string[];
+  model_answer?: string;
+  spoken_version?: string;
+  follow_up?: string;
+  disclaimer?: string;
+  next?: NextQuestion | null;
+}
+
+export interface InterviewSessionDetail {
+  id: string;
+  mode: string;
+  mode_title: string | null;
+  started_at: string;
+  ended_at: string | null;
+  avg_score: number | null;
+  answered: number;
+  total: number;
+  items: AnswerFeedback[];
+  next: NextQuestion | null;
+  disclaimer: string;
+}
+
+export interface InterviewStats {
+  answers: number;
+  sessions: number;
+  average: number | null;
+  by_section: Record<string, { title: string; answers: number; average: number }>;
+  trend: { day: string; average: number }[];
+  weakest: { question: string; section: string; last_score: number }[];
+  disclaimer: string;
+}

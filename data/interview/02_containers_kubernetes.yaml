@@ -1,0 +1,382 @@
+# Docker and Kubernetes. Schema: agents/interview_agent/bank.py
+- id: docker-image-vs-container
+  section: core
+  skills: [docker]
+  difficulty: easy
+  q: What is the difference between a Docker image and a container?
+  tests: Container fundamentals.
+  points:
+    - [image is a read-only template, read-only, template, blueprint, layers]
+    - [container is a running instance, running instance, instance, process]
+    - [container adds a writable layer, writable layer, writable]
+    - [images built from a Dockerfile and stored in a registry, dockerfile, registry, docker hub, ecr, acr]
+  ideal: >-
+    An image is a read-only template made of layers, built from a Dockerfile and stored in a registry such as
+    Docker Hub, ECR or ACR. A container is a running instance of an image: Docker adds a thin writable layer and
+    runs the process in isolated namespaces with cgroup limits. Many containers can run from the same image, and
+    anything written inside a container is lost when it is removed unless it goes to a volume.
+  mistakes:
+    - Saying a container is a lightweight virtual machine with its own kernel.
+  follow_up: How do containers differ from virtual machines?
+  spoken: >-
+    An image is the read-only package, like a template. A container is that image running as a process. You can
+    start many containers from one image.
+
+- id: docker-small-secure-image
+  section: core
+  skills: [docker, container_security]
+  difficulty: medium
+  q: How do you make a Docker image small and secure?
+  tests: Production Dockerfile practice.
+  points:
+    - [multi-stage builds, multi-stage, multi stage, builder stage]
+    - [small base image, slim, alpine, distroless, minimal base]
+    - [run as non-root, non-root, "USER ", nonroot]
+    - [scan the image, trivy, scan, cve, vulnerab]
+    - [no secrets in the image, secret, .dockerignore, env file]
+    - [layer caching order, cache, order, copy requirements first]
+  ideal: >-
+    I use a multi-stage build so compilers and build tools stay in the builder stage and only the runtime and the
+    app are copied into a slim or distroless final image. I order instructions so dependencies are installed
+    before copying the source, which keeps the layer cache effective, and I use a .dockerignore. The container
+    runs as a non-root USER, and I never bake secrets into layers; they come from the runtime (environment or a
+    secrets manager). In CI I scan the image with Trivy and fail the build on critical CVEs, and I pin base image
+    versions.
+  mistakes:
+    - Copying .env files or keys into the image.
+    - Using the latest tag for base images in production.
+  follow_up: How would you rebuild images when the base image gets a security patch?
+  spoken: >-
+    I use a multi-stage build with a slim base image, run as a non-root user, keep secrets out of the image, and
+    scan it with Trivy in the pipeline.
+
+- id: docker-compose-vs-k8s
+  section: core
+  skills: [docker_compose, kubernetes]
+  difficulty: easy
+  q: When is Docker Compose enough, and when do you need Kubernetes?
+  tests: Choosing the right tool, not over-engineering.
+  points:
+    - [compose runs multi-container apps on one host, single host, one host, one machine, local]
+    - [kubernetes schedules across many nodes, cluster, many nodes, multiple nodes, schedul]
+    - [kubernetes adds self-healing and scaling, self-heal, restart, autoscal, rolling update]
+    - [cost and complexity trade-off, complex, overhead, cost, team]
+  ideal: >-
+    Compose defines several containers, networks and volumes on a single host, which is ideal for local
+    development, demos and small single-server deployments. Kubernetes is for running across a cluster of nodes:
+    it schedules pods, restarts failed ones, does rolling updates, service discovery and autoscaling. It brings
+    real operational complexity and cost, so for a small team with one server Compose or a managed PaaS is often
+    the better choice; Kubernetes pays off when you need high availability and many services.
+  mistakes:
+    - Claiming Kubernetes is always better.
+  follow_up: What would you use between the two, for example ECS or a managed PaaS?
+  spoken: >-
+    Compose is great for running a few containers on one machine, like local development. Kubernetes is for many
+    machines and gives self-healing and scaling, but it is more complex, so I only use it when it is needed.
+
+- id: k8s-architecture
+  section: core
+  skills: [kubernetes]
+  difficulty: medium
+  q: Explain the main components of a Kubernetes cluster.
+  tests: Control plane vs node understanding.
+  points:
+    - [API server, api server, kube-apiserver]
+    - [etcd stores cluster state, etcd]
+    - [scheduler places pods, scheduler]
+    - [controller manager reconciles state, controller manager, controllers, reconcil]
+    - [kubelet on each node, kubelet]
+    - [kube-proxy and container runtime, kube-proxy, containerd, container runtime]
+  ideal: >-
+    The control plane has the API server, which every client and component talks to; etcd, the key-value store
+    holding the desired and current state; the scheduler, which assigns new pods to nodes based on resources and
+    constraints; and the controller manager, whose controllers keep reconciling actual state towards desired state
+    (for example keeping a Deployment at 3 replicas). Each worker node runs the kubelet, which starts pods through
+    the container runtime such as containerd and reports their status, and kube-proxy, which programs service
+    networking. In managed services like AKS or EKS the cloud provider runs the control plane.
+  mistakes:
+    - Forgetting etcd or saying the scheduler runs the containers.
+  follow_up: What happens, step by step, when you run kubectl apply for a Deployment?
+  spoken: >-
+    The control plane has the API server, etcd for state, the scheduler to place pods, and controllers that keep
+    things as desired. Each node has a kubelet that runs the pods and kube-proxy for networking.
+
+- id: k8s-deployment-rollout
+  section: core
+  skills: [kubernetes]
+  difficulty: medium
+  q: How does a rolling update work in Kubernetes, and how do you roll back?
+  tests: Safe deployment mechanics.
+  points:
+    - [deployment creates a new replicaset, replicaset, new replica set]
+    - [maxSurge and maxUnavailable, maxsurge, maxunavailable]
+    - [readiness probes gate traffic, readiness, probe]
+    - [rollback with kubectl rollout undo, rollout undo, rollback, previous revision]
+    - [watch rollout status, rollout status, monitor, metrics]
+  ideal: >-
+    When the pod template changes, the Deployment creates a new ReplicaSet and gradually scales it up while
+    scaling the old one down, within maxSurge (extra pods allowed) and maxUnavailable. A new pod only receives
+    traffic once its readiness probe passes, so a broken version stalls the rollout instead of taking the service
+    down. I watch kubectl rollout status and the error rate; to roll back I run kubectl rollout undo, which
+    switches back to the previous ReplicaSet, or in GitOps I revert the commit.
+  mistakes:
+    - Not mentioning readiness probes, which are what make rolling updates safe.
+  follow_up: When would you choose blue-green or canary instead?
+  spoken: >-
+    Kubernetes starts new pods and removes old ones step by step. New pods only get traffic when the readiness
+    probe passes. If something is wrong I use kubectl rollout undo to go back.
+
+- id: k8s-probes
+  section: core
+  skills: [kubernetes]
+  difficulty: medium
+  q: What is the difference between liveness, readiness and startup probes?
+  tests: Health-check design.
+  points:
+    - [liveness restarts a stuck container, liveness, restart]
+    - [readiness removes the pod from service endpoints, readiness, endpoints, traffic]
+    - [startup probe for slow starts, startup]
+    - [wrong liveness probes cause restart loops, restart loop, crashloop, cascad, too aggressive]
+  ideal: >-
+    A liveness probe tells the kubelet the container is stuck, so it restarts it. A readiness probe says whether
+    the pod can serve traffic; failing it removes the pod from the Service endpoints without restarting it, which
+    is right during warm-up or when a dependency is down. A startup probe protects slow-starting apps by holding
+    off liveness checks until startup succeeds. A common mistake is making liveness depend on a database: if the
+    database blips, every pod restarts at once and turns a small incident into an outage.
+  mistakes:
+    - Using the same endpoint and settings for liveness and readiness.
+  follow_up: What would you check in a pod stuck in CrashLoopBackOff?
+  spoken: >-
+    Liveness restarts a stuck container. Readiness decides if the pod gets traffic. Startup gives slow apps time
+    to start. Do not make liveness depend on the database, or everything restarts together.
+
+- id: k8s-crashloop
+  section: scenario
+  skills: [kubernetes]
+  difficulty: medium
+  q: A pod is in CrashLoopBackOff. Walk me through how you debug it.
+  tests: Methodical Kubernetes troubleshooting.
+  points:
+    - [describe the pod and read events, kubectl describe, events]
+    - [read current and previous logs, kubectl logs, --previous, previous logs]
+    - [check exit code and OOMKilled, exit code, oomkilled, oom]
+    - [check config, secrets and env, configmap, secret, env, config]
+    - [check probes and resources, probe, limits, resources]
+  ideal: >-
+    I start with kubectl describe pod to read events and the last state: the exit code, and whether it was
+    OOMKilled. Then kubectl logs, and kubectl logs --previous for the crashed container, because the current one
+    may have just restarted. Typical causes are a missing ConfigMap or Secret or wrong environment variables, the
+    app failing to reach a dependency at startup, a memory limit that is too low (OOMKilled, exit 137), or a
+    liveness probe that kills the app before it is ready. I fix the cause and, if needed, reproduce it locally with
+    the same image.
+  mistakes:
+    - Only reading the logs of the current container and missing --previous.
+  follow_up: What does exit code 137 tell you?
+  spoken: >-
+    I run kubectl describe to see events and the exit code, then kubectl logs with --previous. Usually it is bad
+    config, a missing secret, too little memory, or a probe that is too strict.
+
+- id: k8s-services
+  section: core
+  skills: [kubernetes, load_balancing]
+  difficulty: medium
+  q: Explain ClusterIP, NodePort, LoadBalancer and Ingress.
+  tests: Kubernetes networking basics.
+  points:
+    - [ClusterIP is internal only, clusterip, internal]
+    - [NodePort opens a port on every node, nodeport]
+    - [LoadBalancer provisions a cloud load balancer, loadbalancer, cloud load balancer]
+    - [Ingress does HTTP routing with an ingress controller, ingress, controller, host, path]
+    - [TLS termination, tls, certificate, cert-manager]
+  ideal: >-
+    A ClusterIP Service gives pods a stable virtual IP and DNS name inside the cluster only. NodePort also opens the
+    same port on every node, mostly useful for testing. A LoadBalancer Service asks the cloud to create an external
+    load balancer pointing at the nodes, one per service, which gets expensive. Ingress is an HTTP layer: one
+    ingress controller (for example NGINX or Application Gateway on AKS) routes by host and path to many
+    ClusterIP services and terminates TLS, often with cert-manager.
+  mistakes:
+    - Thinking Ingress works without an ingress controller installed.
+  follow_up: How does a pod find another service by name?
+  spoken: >-
+    ClusterIP is only inside the cluster. NodePort opens a port on each node. LoadBalancer creates a cloud load
+    balancer. Ingress routes web traffic by host and path to many services and handles TLS.
+
+- id: k8s-requests-limits
+  section: core
+  skills: [kubernetes]
+  difficulty: medium
+  q: What are resource requests and limits, and what happens if you set them wrong?
+  tests: Capacity and stability.
+  points:
+    - [requests are used for scheduling, scheduling, scheduler, guaranteed]
+    - [limits cap usage, cap, maximum, limit]
+    - [memory over limit is OOMKilled, oomkill, oom]
+    - [cpu over limit is throttled, throttl]
+    - [QoS classes, qos, guaranteed, burstable, besteffort]
+  ideal: >-
+    Requests are what the scheduler reserves on a node, so they decide placement. Limits are the hard ceiling: a
+    container above its memory limit is OOMKilled, while one above its CPU limit is throttled, which shows up as
+    latency rather than a crash. Requests too low overpack nodes and cause noisy neighbours and evictions; too high
+    waste money. Together they set the QoS class (Guaranteed, Burstable, BestEffort), which decides who is evicted
+    first. I set them from real usage metrics and review them regularly.
+  mistakes:
+    - Saying CPU limits cause the pod to be killed.
+  follow_up: How would you right-size requests for a service?
+  spoken: >-
+    Requests are what the scheduler reserves. Limits are the maximum. Too much memory means the pod is killed, too
+    much CPU means it is slowed down. I set them from real metrics.
+
+- id: k8s-hpa
+  section: core
+  skills: [kubernetes, auto_scaling]
+  difficulty: medium
+  q: How does the Horizontal Pod Autoscaler work?
+  tests: Scaling knowledge.
+  points:
+    - [scales replicas based on metrics, replicas, metric]
+    - [needs metrics server or custom metrics, metrics server, metrics-server, custom metric, prometheus adapter]
+    - [depends on requests for cpu percentage, request, utilization]
+    - [cluster autoscaler adds nodes, cluster autoscaler, nodes, karpenter]
+    - [min and max replicas and stabilisation, min, max, stabiliz, cooldown]
+  ideal: >-
+    The HPA periodically reads a metric, usually CPU utilisation from metrics-server as a percentage of the pod's
+    request, and changes the replica count of a Deployment to hit the target, between minReplicas and maxReplicas,
+    with stabilisation windows to avoid flapping. It can also use custom metrics such as requests per second via
+    Prometheus. The HPA only adds pods; if nodes are full, the Cluster Autoscaler (or Karpenter) adds nodes.
+    Without CPU requests set, percentage-based scaling cannot work.
+  mistakes:
+    - Forgetting that pods need resource requests for CPU-based HPA.
+  follow_up: What is the difference between HPA and VPA?
+  spoken: >-
+    The HPA watches a metric like CPU and adds or removes pods to reach a target, within a minimum and maximum. If
+    the nodes are full, the cluster autoscaler adds nodes.
+
+- id: k8s-configmap-secret
+  section: core
+  skills: [kubernetes, secrets_management]
+  difficulty: medium
+  q: ConfigMaps and Secrets - what is the difference, and are Kubernetes Secrets secure?
+  tests: Configuration and secrets hygiene.
+  points:
+    - [configmap for non-sensitive config, configmap, non-sensitive]
+    - [secrets are only base64 encoded, base64]
+    - [encryption at rest and RBAC, encryption at rest, rbac, etcd encryption]
+    - [external secret store, vault, key vault, secrets manager, external secrets, csi]
+  ideal: >-
+    Both inject configuration into pods as environment variables or files. ConfigMaps are for non-sensitive
+    settings. Secrets are meant for sensitive values, but by default they are only base64-encoded, not encrypted,
+    so anyone who can read them in the API or etcd has them. To make them safer I enable encryption at rest for
+    etcd, restrict access with RBAC, avoid printing them in logs, and preferably keep the real values in a secret
+    store like HashiCorp Vault or Azure Key Vault, synced with the External Secrets Operator or the CSI driver.
+  mistakes:
+    - Saying base64 is encryption.
+    - Committing Secret manifests with real values to Git.
+  follow_up: How would you rotate a database password used by pods?
+  spoken: >-
+    ConfigMaps hold normal settings, Secrets hold sensitive ones. But Secrets are only base64, not encrypted, so I
+    use RBAC, encryption at rest, and a real vault like HashiCorp Vault or Key Vault.
+  red_flags:
+    - {pattern: "base64 (is|means) encrypt", message: "base64 is encoding, not encryption."}
+
+- id: k8s-helm
+  section: core
+  skills: [helm, kubernetes]
+  difficulty: easy
+  q: What is Helm and why would you use it?
+  tests: Packaging and templating knowledge.
+  points:
+    - [package manager for Kubernetes, package manager, chart]
+    - [templates with values per environment, template, values.yaml, values]
+    - [releases, upgrade and rollback, release, upgrade, rollback]
+    - [alternatives such as Kustomize, kustomize]
+  ideal: >-
+    Helm is a package manager for Kubernetes. A chart holds templated manifests plus a values.yaml, so the same
+    chart can be deployed to dev, staging and production with different values. Helm tracks each install as a
+    release with revisions, which makes helm upgrade and helm rollback easy, and there are public charts for common
+    software such as Prometheus. Kustomize is the template-free alternative using overlays; in GitOps with Argo CD
+    either works.
+  mistakes:
+    - Putting secrets directly into values files committed to Git.
+  follow_up: How do you test a Helm chart before deploying it?
+  spoken: >-
+    Helm is a package manager for Kubernetes. Charts are templates with values for each environment, and Helm can
+    upgrade and roll back releases.
+
+- id: k8s-rbac-security
+  section: core
+  skills: [k8s_security, kubernetes]
+  difficulty: hard
+  q: How would you harden a Kubernetes cluster?
+  tests: Kubernetes security depth.
+  points:
+    - [RBAC least privilege, rbac, least privilege, role, service account]
+    - [pod security standards, pod security, restricted, runasnonroot, privileged]
+    - [network policies, network polic, networkpolic]
+    - [admission control and policy, admission, kyverno, opa, gatekeeper]
+    - [image scanning and trusted registries, trivy, scan, signed, trusted registr]
+    - [protect the API server and etcd, api server, etcd, private cluster, audit log]
+  ideal: >-
+    I work in layers. Access: RBAC with least privilege, dedicated service accounts without default token mounting,
+    and a private API server with audit logging. Workloads: enforce Pod Security Standards at the restricted level
+    (non-root, no privileged containers, read-only root filesystem, seccomp), plus resource limits. Network: default
+    deny NetworkPolicies and explicit allows between services, because an attacker who reaches one pod should not
+    reach everything; the trade-off is more rules to maintain. Supply chain: scan images with Trivy, only allow
+    images from trusted registries, and enforce these rules with an admission controller such as Kyverno or OPA
+    Gatekeeper. Secrets come from a vault and etcd is encrypted at rest. Runtime detection like Falco catches what
+    slips through.
+  mistakes:
+    - Only mentioning one layer, such as RBAC.
+  follow_up: Write a NetworkPolicy that only lets the frontend reach the backend.
+  spoken: >-
+    I use least-privilege RBAC, Pod Security Standards, network policies, image scanning, and an admission
+    controller like Kyverno to enforce the rules. Secrets come from a vault.
+
+- id: k8s-pending-pod
+  section: scenario
+  skills: [kubernetes]
+  difficulty: medium
+  q: Pods are stuck in Pending. What are the likely causes?
+  tests: Scheduling troubleshooting.
+  points:
+    - [read the events with describe, describe, events]
+    - [insufficient cpu or memory, insufficient, resources, capacity]
+    - [taints tolerations and node selectors, taint, toleration, node selector, affinity]
+    - [unbound persistent volume claim, pvc, persistent volume, storage class]
+    - [cluster autoscaler or quota, autoscaler, quota, limitrange]
+  ideal: >-
+    Pending means the scheduler cannot place the pod, and kubectl describe pod shows why in the events. Usually it
+    is insufficient CPU or memory on any node for the pod's requests, a nodeSelector, affinity or taint that no node
+    satisfies, a PersistentVolumeClaim that cannot bind (wrong storage class or zone), or a namespace ResourceQuota.
+    Fixes are lowering requests if they are oversized, adding nodes or letting the cluster autoscaler do it, or
+    correcting the selectors and storage class.
+  mistakes:
+    - Restarting things without reading the scheduler events.
+  follow_up: How is Pending different from ContainerCreating?
+  spoken: >-
+    Pending means the pod cannot be scheduled. I read kubectl describe events. Usually there is not enough CPU or
+    memory, a taint or selector does not match, or the volume cannot bind.
+
+- id: gitops-argocd
+  section: core
+  skills: [argocd, gitops]
+  difficulty: medium
+  q: What is GitOps, and how does Argo CD work?
+  tests: Modern deployment models.
+  points:
+    - [Git is the source of truth, source of truth, git]
+    - [pull-based reconciliation, pull, reconcil, sync]
+    - [drift detection, drift]
+    - [rollback by reverting a commit, revert, rollback]
+    - [no cluster credentials in CI, credentials, ci does not, push access]
+  ideal: >-
+    In GitOps the desired state of the cluster lives in Git and changes happen through pull requests. Argo CD runs
+    inside the cluster, watches the repository and continuously reconciles: when Git changes it syncs the
+    manifests, and if someone changes the cluster by hand it reports drift and can revert it. Rollback is a git
+    revert, and every change has review and history. It is also more secure than push-based CD because the CI
+    system no longer needs cluster admin credentials.
+  mistakes:
+    - Describing GitOps as just storing YAML in Git.
+  follow_up: How do you handle secrets in a GitOps repository?
+  spoken: >-
+    In GitOps, Git holds the desired state. Argo CD runs in the cluster, pulls changes from Git and keeps the
+    cluster in sync. Rollback is just reverting a commit.

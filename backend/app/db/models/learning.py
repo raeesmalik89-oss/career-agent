@@ -61,6 +61,9 @@ class InterviewQuestion(IdMixin, TimestampMixin, Base):
     related_repo_ids: Mapped[list] = mapped_column(JSONType, default=list, nullable=False)
     skill_ids: Mapped[list] = mapped_column(JSONType, default=list, nullable=False)
     embedding: Mapped[list | None] = mapped_column(Embedding())
+    bank_id: Mapped[str | None] = mapped_column(String(120), index=True)
+    key_points: Mapped[list] = mapped_column(JSONType, default=list, nullable=False)
+    spoken_answer: Mapped[str | None] = mapped_column(Text)
 
 
 class InterviewSession(IdMixin, TimestampMixin, Base):
@@ -91,6 +94,8 @@ class InterviewAnswer(IdMixin, Base):
     improved_answer: Mapped[str] = mapped_column(Text, nullable=False)
     professional_version: Mapped[str] = mapped_column(Text, nullable=False)
     spoken_version: Mapped[str] = mapped_column(Text, nullable=False)
+    rubric: Mapped[dict] = mapped_column(JSONType, default=dict, nullable=False)
+    bank_id: Mapped[str | None] = mapped_column(String(120), index=True)
     at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
 
 

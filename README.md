@@ -17,8 +17,8 @@ The design is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 | 5 | Matching Engine | ✅ done |
 | 6 | Dashboard | ✅ done |
 | 7 | Application Engine (assisted apply) | ✅ done |
-| 8 | Interview Coach | next |
-| 9 | Skill Gap + Concept Maps | |
+| 8 | Interview Coach | ✅ done |
+| 9 | Skill Gap + Concept Maps | next |
 | 10 | Scheduler + Notifications | |
 | 11 | Observability + Security hardening | |
 | 12 | Testing + Deployment | |
@@ -91,6 +91,14 @@ The design is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 - **Duplicate guard**: one application per job, plus a same-company, near-identical-title check within 60 days (reposts).
 - Automated form submission (browser automation) is not part of this milestone.
 
+### What Milestone 8 contains
+- **Question bank** (`data/interview/*.yaml`, 72 questions, validated on load): Linux and networking, Docker and Kubernetes, Terraform and CI/CD, AWS and Azure, observability and SRE, DevSecOps, AIOps/MLOps/AI, system design, troubleshooting scenarios and HR. Each has what it tests, key concepts, a model answer, common mistakes, a follow-up and a simple spoken-English version. A test checks that every model answer passes its own rubric.
+- **Questions about you** (`agents/interview_agent/personal.py`): a walk-through for each CV project (only technologies you have evidence for), a "how exactly did you measure that?" question for every number in your CV, and personal HR questions ("tell me about yourself", your career change, training-only experience) with outlines built from your facts. Nothing is invented.
+- **Daily pack** of 60 questions in 6 sections (target-job skills, gaps, your projects, troubleshooting, design and SRE, HR), weighted by how often your target jobs ask for each skill. Spaced repetition: questions you scored under 70 in the last 14 days come back; questions you aced rest; never-shown questions come before repeats.
+- **Mock interview**: one question at a time. The model answer is hidden until you answer. The score uses the architecture's rubric (accuracy 40, completeness 25, structure/STAR 15, depth 10, communication 10) and shows what you covered, the concepts you missed, mistakes, the model answer, a spoken version and the likely follow-up. For questions about a CV number, an answer that never addresses that number is capped. The scoring is automatic, based on concept coverage and structure, and says so: it cannot judge whether each statement is true. An AI grader can be plugged in later.
+- **Progress**: averages by section, a 30-day trend, and the questions to practise again.
+- Migration `0003` adds question-bank identity, key points, spoken answers and the rubric breakdown.
+
 ## API (so far)
 
 | Method | Path | Role |
@@ -116,6 +124,8 @@ The design is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 | GET/POST | `/api/v1/applications` · GET `/applications/{id}` · `/resume.docx` · `/cover-letter.docx` | any / owner |
 | PATCH/POST | `/api/v1/applications/{id}/answers/{answer_id}` · `/approve` · `/reject` · `/rebuild` · `/status` | owner |
 | POST | `/api/v1/profile/facts/verify-bulk` | owner |
+| GET | `/api/v1/interview/packs/{date or today}` · `/interview/sessions` · `/sessions/{id}` · `/interview/stats` | any |
+| POST | `/api/v1/interview/packs/today/regenerate` · `/interview/sessions` · `/sessions/{id}/answer` · `/sessions/{id}/end` | owner |
 | GET | `/api/v1/audit-logs` · `/api/v1/agent-runs` | owner |
 | GET | `/healthz` · `/readyz` · `/metrics` · `/docs` (dev only) | – |
 

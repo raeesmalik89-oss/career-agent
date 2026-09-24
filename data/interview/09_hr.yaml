@@ -1,0 +1,167 @@
+# HR and behavioural questions. Answers must be told with the user's own real examples (STAR).
+# The model answers show the structure; the mock interview never invents experience for the user.
+- id: hr-weakness
+  section: hr
+  skills: []
+  difficulty: easy
+  q: What is your greatest weakness?
+  tests: Self-awareness and a plan to improve, without a fake weakness.
+  points:
+    - [a real weakness, weakness, i used to, i tend to, struggle]
+    - [its impact, impact, affected, caused, meant]
+    - [what you are doing about it, working on, improv, learning, now i, practice]
+    - [evidence of progress, progress, result, since then, now]
+  ideal: >-
+    Pick a real, work-relevant weakness that is not central to the job, explain its impact, and show what you are
+    doing about it with evidence. For example: "My professional experience in DevOps is still limited to a
+    12-month training programme, so I do not yet have years of production on-call experience. To close that gap I
+    build and run projects end to end on GitHub, including monitoring and incident drills, and I document what
+    broke and how I fixed it."
+  mistakes:
+    - Clichés such as "I am a perfectionist" or "I work too hard".
+  follow_up: How will you handle production on-call without prior experience?
+  spoken: >-
+    I pick a real weakness, say how it affected my work, and what I am doing to improve it, with an example of
+    progress.
+  red_flags:
+    - {pattern: "perfectionist|work too hard|care too much", message: "Interviewers hear this cliché often; use a real weakness with a plan."}
+
+- id: hr-conflict
+  section: hr
+  skills: []
+  difficulty: medium
+  q: Tell me about a time you disagreed with a colleague or a decision. What happened?
+  tests: Collaboration and handling conflict (STAR).
+  points:
+    - [situation and what the disagreement was, disagree, situation, colleague, decision]
+    - [you listened to understand, listen, understand, their view, asked]
+    - [used data or evidence, data, evidence, test, facts]
+    - [outcome and relationship kept, outcome, agreed, result, relationship]
+    - [what you learned, learned, learnt, next time]
+  ideal: >-
+    Use STAR with a real example (for example from hospital pharmacy work or your training projects).
+    Situation: what the disagreement was about. Task: what you were responsible for. Action: you listened to
+    understand the other person's reasons, brought data or a small test instead of opinions, and agreed on a way
+    forward, escalating respectfully if patient safety or production was at risk. Result: what happened, and that
+    the working relationship stayed good. End with what you learned.
+  mistakes:
+    - Blaming the other person or describing a conflict you "won".
+  follow_up: What would you do if your manager insisted on something you believed was unsafe?
+  spoken: >-
+    I describe a real situation, how I listened to the other person, used facts instead of opinions, and how we
+    agreed. Then I say the result and what I learned.
+
+- id: hr-failure
+  section: hr
+  skills: []
+  difficulty: medium
+  q: Tell me about a time something you built failed or went wrong.
+  tests: Ownership, learning and honesty (STAR).
+  points:
+    - [what went wrong, failed, broke, went wrong, mistake, bug]
+    - [you took ownership, i was responsible, my mistake, i owned, ownership, own your part, my part]
+    - [how you fixed it, fixed, rolled back, debugged, solved]
+    - [what you changed to prevent it, prevent, test, monitor, alert, checklist]
+    - [what you learned, learned, learnt]
+  ideal: >-
+    Choose a real incident from your projects or labs, for example a deployment, pipeline or cluster that broke.
+    Situation and task in one or two sentences, then your actions: how you noticed, how you found the cause, how
+    you fixed it. Then the result and, most important, what you changed so it cannot happen again (a test, an
+    alert, a checklist) and what you learned. Own your part without blaming tools or people, because
+    interviewers are testing ownership more than the failure itself.
+  mistakes:
+    - Choosing a story with no real failure, or blaming someone else.
+  follow_up: What did you change in your process afterwards?
+  spoken: >-
+    I tell a real story where something broke, what I did to find and fix it, and what I changed so it does not
+    happen again.
+
+- id: hr-learn-fast
+  section: hr
+  skills: []
+  difficulty: easy
+  q: Tell me about a time you had to learn a new technology quickly.
+  tests: Learning ability, important for a career-changer.
+  points:
+    - [the technology and why it was needed, needed, had to learn, new technology, deadline]
+    - [how you learned, documentation, docs, lab, hands-on, course, practice]
+    - [what you built, built, deployed, created, project]
+    - [result, result, working, passed, delivered]
+  ideal: >-
+    Give a specific example from your training or projects: which technology (for example Kubernetes security with
+    Kyverno, or Kafka), why you needed it and by when, how you learned it (official docs, a small lab first, then
+    the real task), what you built with it, and the result. Mention how you check your understanding, for example by
+    breaking and fixing things on purpose.
+  mistakes:
+    - Listing courses without a concrete result.
+  follow_up: What are you learning right now?
+  spoken: >-
+    I name the technology and why I needed it, how I learned it with docs and small labs, what I built, and the
+    result.
+
+- id: hr-why-devops
+  section: hr
+  skills: []
+  difficulty: easy
+  q: Why do you want to work in DevOps / cloud engineering?
+  tests: Genuine motivation.
+  points:
+    - [what attracts you to the work, enjoy, automat, systems, reliab, problem]
+    - [evidence you already do it, project, built, github, lab, training]
+    - [connection to your background, background, healthcare, pharmacy, previous]
+    - [where you want to grow, grow, learn, goal, future]
+  ideal: >-
+    Be specific and link motivation to evidence: what you enjoy about the work (automating repetitive tasks, making
+    systems reliable, solving problems under pressure), what you have already built to prove it, how your previous
+    background helps (for example, working in healthcare taught you that reliability and safety matter because
+    people depend on the system), and where you want to grow in the next two years.
+  mistakes:
+    - Only saying "because it pays well" or "it is in demand".
+  follow_up: Where do you see yourself in two years?
+  spoken: >-
+    I enjoy automating things and making systems reliable. I have already built projects to practise it, my
+    healthcare background taught me that reliability matters, and I want to grow in cloud and SRE.
+
+- id: hr-salary
+  section: hr
+  skills: []
+  difficulty: medium
+  q: What are your salary expectations?
+  tests: Negotiation preparation.
+  points:
+    - [researched market range, research, market, range]
+    - [give a range, range, between]
+    - [flexible depending on the whole package, flexible, package, benefits, total]
+    - [ask about their budget, budget, what is the range, your range]
+  ideal: >-
+    Research the market range for the role and city before the interview. Then give a range, not a single number,
+    based on that research, and say you are flexible depending on the whole package (learning budget, remote work,
+    benefits). It is fine to ask first what range they have budgeted for the role.
+  mistakes:
+    - Naming a number without any research.
+  follow_up: What is the lowest you would accept?
+  spoken: >-
+    I researched the market, so I would expect a range between X and Y, and I am flexible depending on the full
+    package. May I ask what range you have planned for this role?
+
+- id: hr-questions-for-us
+  section: hr
+  skills: []
+  difficulty: easy
+  q: Do you have any questions for us?
+  tests: Genuine interest and preparation.
+  points:
+    - [ask about the team and on-call, team, on-call, on call]
+    - [ask about the tech stack or challenges, stack, challenge, problem]
+    - [ask about learning and growth, learn, grow, mentor, training]
+    - [ask what success looks like, success, first 90 days, expectations]
+  ideal: >-
+    Always ask two or three prepared questions, for example: what does success look like in the first 90 days?
+    What is the biggest infrastructure challenge the team is facing? How does on-call work and how are incidents
+    reviewed? How does the team support learning and mentoring for newer engineers?
+  mistakes:
+    - Saying "No, I think everything is clear."
+  follow_up: (None; this closes the interview.)
+  spoken: >-
+    Yes: what does success look like in the first 90 days, what is the team's biggest challenge, how does on-call
+    work, and how do you support learning?

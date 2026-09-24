@@ -1,0 +1,229 @@
+# Linux, shell and networking fundamentals. Schema: agents/interview_agent/bank.py
+- id: linux-process-high-cpu
+  section: scenario
+  skills: [linux]
+  difficulty: easy
+  q: A Linux server is slow and a user says CPU is at 100%. How do you investigate?
+  tests: A calm, ordered troubleshooting method on Linux, not guessing.
+  points:
+    - [find the process with top or htop, top, htop, ps aux, "ps -eo"]
+    - [check load average, load average, uptime, loadavg]
+    - [look at what the process is doing, strace, logs, journalctl, /proc]
+    - [distinguish user, system and iowait time, iowait, "%wa", system time, user time, vmstat]
+    - [decide a fix and prevent recurrence, restart, limit, cgroup, nice, root cause, alert]
+  ideal: >-
+    First I confirm the problem with uptime and top: the load average and which processes use the CPU.
+    In top I check whether the time is user, system or iowait, because high iowait means the disk, not the CPU,
+    is the bottleneck. For the busy process I look at its logs (journalctl -u service), its threads and, if
+    needed, strace to see what it is doing. Then I decide: if it is a runaway job I can renice or restart it,
+    but I also find the root cause, for example a bad deploy or a loop, and add an alert so it is caught earlier.
+  mistakes:
+    - Killing the process immediately without finding out why it was busy.
+    - Ignoring iowait and blaming the CPU when the disk is the real bottleneck.
+  follow_up: How would you tell whether the problem is CPU, memory or disk?
+  spoken: >-
+    First I check top and the load average to see which process is using the CPU. Then I look at its logs to
+    understand why. I fix it, for example restart or limit it, and then I find the real cause so it does not
+    happen again.
+  red_flags:
+    - {pattern: "\\bkill -9\\b", message: "Mentioning kill -9 first sounds risky; explain investigation before force-killing."}
+
+- id: linux-disk-full
+  section: scenario
+  skills: [linux]
+  difficulty: easy
+  q: You get an alert that the disk on a server is 95% full. What do you do?
+  tests: Safe disk cleanup and finding the real cause.
+  points:
+    - [check usage with df, "df -h", df]
+    - [find what is large with du, "du -sh", du, ncdu]
+    - [check logs and log rotation, logrotate, log rotation, /var/log, journal]
+    - [deleted files still held open, lsof, deleted, still open, open file handle]
+    - [fix the cause and add monitoring, alert, threshold, retention, monitoring]
+  ideal: >-
+    I run df -h to see which filesystem is full, then du -sh on the biggest directories (or ncdu) to find what
+    grew. Often it is logs, so I check /var/log and whether logrotate is working, or old Docker images and
+    volumes. If df shows full but du does not add up, a deleted file may still be held open: lsof | grep deleted,
+    then restart that process. I free space safely, for example by compressing or rotating logs rather than
+    deleting data blindly, then fix the root cause with retention settings and keep an alert at a lower threshold.
+  mistakes:
+    - Deleting files in /var or database folders without knowing what they are.
+    - Forgetting that a deleted but open file still uses space.
+  follow_up: Why might df and du show different numbers?
+  spoken: >-
+    I use df to see which disk is full and du to find the big folders. Usually it is logs, so I check log
+    rotation. I clean up safely and then set a retention policy and an alert so it does not happen again.
+
+- id: linux-permissions
+  section: core
+  skills: [linux]
+  difficulty: easy
+  q: Explain Linux file permissions and what chmod 750 means.
+  tests: Basic Linux security knowledge.
+  points:
+    - [owner group others, owner, group, others]
+    - [read write execute, read, write, execute, rwx]
+    - [octal values 4 2 1, "4", octal, "7 = rwx", "7 means"]
+    - [750 meaning, "rwxr-x---", no access for others, others have no, others nothing]
+    - [least privilege, least privilege, minimum, only what is needed]
+  ideal: >-
+    Every file has permissions for three classes: the owner, the group and others. Each class can have read (4),
+    write (2) and execute (1), and the octal digit is their sum. So 750 means the owner has rwx (7), the group
+    has r-x (5) and others have nothing (0), written rwxr-x---. For a directory, execute means you can enter it.
+    In practice I apply least privilege: services run as their own user and only get the access they need.
+  mistakes:
+    - Using chmod 777 to "fix" a permission problem.
+  follow_up: What are setuid and the sticky bit used for?
+  spoken: >-
+    Permissions are for the owner, the group and everyone else. Read is 4, write is 2, execute is 1. So 750 means
+    the owner can do everything, the group can read and run, and others get nothing.
+  red_flags:
+    - {pattern: "\\b777\\b", message: "Suggesting 777 is a red flag for interviewers; explain least privilege instead."}
+
+- id: linux-systemd-service
+  section: core
+  skills: [linux]
+  difficulty: medium
+  q: How do you run an application as a service on Linux so it restarts automatically?
+  tests: Practical systemd knowledge.
+  points:
+    - [systemd unit file, systemd, unit file, .service]
+    - [restart policy, "Restart=", restart=always, restart=on-failure]
+    - [enable on boot, systemctl enable, enable]
+    - [run as a non-root user, "User=", non-root, dedicated user]
+    - [check logs with journalctl, journalctl, systemctl status]
+  ideal: >-
+    I write a systemd unit file in /etc/systemd/system/app.service with ExecStart pointing to the app,
+    User= set to a dedicated non-root user, WorkingDirectory, environment variables from an EnvironmentFile,
+    and Restart=on-failure with a RestartSec. Then systemctl daemon-reload, systemctl enable --now app to start it
+    and enable it on boot, and I check it with systemctl status and journalctl -u app -f.
+  mistakes:
+    - Running the service as root.
+    - Using nohup or screen in production instead of a supervisor.
+  follow_up: How would you pass secrets to that service safely?
+  spoken: >-
+    I create a systemd service file with the start command, a normal user and a restart policy. Then I enable it
+    so it starts on boot, and I read its logs with journalctl.
+
+- id: net-dns-resolution
+  section: core
+  skills: [linux]
+  difficulty: medium
+  q: What happens when you type a URL into a browser, up to the page loading?
+  tests: End-to-end understanding of DNS, TCP, TLS and HTTP.
+  points:
+    - [DNS resolution, dns, resolver, a record, name server]
+    - [TCP connection, tcp, handshake, syn]
+    - [TLS handshake and certificate, tls, ssl, certificate, https]
+    - [HTTP request and response, http request, get request, status code, response]
+    - [load balancer or CDN in front, load balancer, cdn, reverse proxy, nginx]
+  ideal: >-
+    The browser first resolves the name with DNS: cache, then the OS resolver, then recursive resolvers down to
+    the authoritative name server, which returns an A or AAAA record. It opens a TCP connection to that IP
+    (three-way handshake), then for HTTPS does a TLS handshake where the server presents a certificate the browser
+    verifies. It sends an HTTP request; usually a CDN or load balancer receives it and forwards it to an
+    application server, which may call databases or caches before returning a response with a status code. The
+    browser then renders the HTML and fetches the other assets.
+  mistakes:
+    - Skipping DNS or TLS entirely.
+    - Not mentioning load balancers or proxies, which is where DevOps work happens.
+  follow_up: Where would you look if the site is slow only for users in one region?
+  spoken: >-
+    First DNS turns the name into an IP address. Then the browser opens a TCP connection and does a TLS handshake
+    for HTTPS. It sends an HTTP request, usually through a load balancer, to the server, and gets the page back.
+
+- id: net-tcp-vs-udp
+  section: core
+  skills: []
+  difficulty: easy
+  q: What is the difference between TCP and UDP, and when would you use each?
+  tests: Networking basics.
+  points:
+    - [TCP is connection-oriented and reliable, reliable, connection, ordered, retransmi]
+    - [UDP is connectionless and faster, connectionless, no guarantee, no delivery guarantee, faster, lighter, lower overhead, lower-latency, datagram]
+    - [TCP use cases, http, ssh, database]
+    - [UDP use cases, dns, video, streaming, voip, gaming]
+  ideal: >-
+    TCP is connection-oriented: it does a handshake, guarantees delivery and order with acknowledgements and
+    retransmissions, and controls congestion, so it is used for HTTP, SSH and databases. UDP just sends datagrams
+    with no delivery guarantee, which makes it lighter and lower-latency, so it suits DNS queries, video, voice and
+    games where speed matters more than a lost packet, because a late packet is useless there anyway. QUIC (HTTP/3)
+    is built on UDP and adds reliability itself.
+  mistakes:
+    - Saying UDP is "unreliable so never used in production".
+  follow_up: Why does DNS mostly use UDP but sometimes TCP?
+  spoken: >-
+    TCP is reliable and keeps order, so we use it for web and databases. UDP is faster but does not guarantee
+    delivery, so we use it for DNS, video and calls.
+
+- id: net-cant-reach-service
+  section: scenario
+  skills: [linux]
+  difficulty: medium
+  q: A service on another server is not reachable from your app server. How do you debug it step by step?
+  tests: Layered network troubleshooting.
+  points:
+    - [check DNS, dig, nslookup, dns]
+    - [check reachability, ping, traceroute, mtr]
+    - [check the port, telnet, nc, netcat, curl, port]
+    - [check firewall or security group, firewall, security group, iptables, ufw, nsg]
+    - [check the service is listening, ss -tlnp, netstat, listening, bound to]
+  ideal: >-
+    I go layer by layer. Does the name resolve (dig or nslookup)? Is the host reachable (ping, traceroute, keeping
+    in mind ICMP may be blocked)? Is the port open from my side (nc -zv host port or curl)? If not, I check the
+    target: is the service running and listening on the right interface and port (ss -tlnp, often it is bound to
+    127.0.0.1 only)? Then firewalls in between: iptables or ufw on the host and cloud security groups or NSGs, and
+    any network ACLs. Finally the application logs on both sides.
+  mistakes:
+    - Concluding the server is down just because ping fails (ICMP is often blocked).
+  follow_up: What is the difference between a security group and a network ACL in AWS?
+  spoken: >-
+    I check step by step: does DNS work, can I reach the host, is the port open, is the service listening, and is
+    a firewall or security group blocking it. Then I read the logs.
+
+- id: bash-script-safety
+  section: core
+  skills: [bash]
+  difficulty: medium
+  q: What do you put at the top of a Bash script to make it safer, and why?
+  tests: Practical scripting hygiene.
+  points:
+    - [set -e to stop on errors, set -e, errexit]
+    - [set -u for undefined variables, set -u, nounset, undefined variable]
+    - [set -o pipefail, pipefail]
+    - [quote variables, quote, "\"$"]
+    - [shellcheck, shellcheck, lint]
+  ideal: >-
+    I start with #!/usr/bin/env bash and set -euo pipefail: -e stops the script when a command fails, -u fails on
+    undefined variables instead of silently using an empty string, and pipefail makes a pipeline fail if any
+    command in it fails. I quote variables ("$var") to avoid word splitting, use trap for cleanup, and run
+    shellcheck in CI to catch common bugs.
+  mistakes:
+    - Not quoting variables, which breaks on file names with spaces.
+  follow_up: When would you write the script in Python instead?
+  spoken: >-
+    I use set -euo pipefail so the script stops on errors, on unset variables and on failed pipes. I quote
+    variables and check the script with shellcheck.
+
+- id: git-merge-rebase
+  section: core
+  skills: [git]
+  difficulty: easy
+  q: What is the difference between git merge and git rebase?
+  tests: Everyday Git workflow knowledge.
+  points:
+    - [merge creates a merge commit and keeps history, merge commit, keeps history, preserves]
+    - [rebase rewrites commits onto a new base, rewrite, replay, linear, new base]
+    - [do not rebase shared branches, shared, public branch, force push, others]
+    - [when to use each, pull request, feature branch, clean history]
+  ideal: >-
+    Merge combines two branches with a merge commit and keeps the full history as it happened. Rebase replays my
+    commits on top of another branch, giving a linear history but rewriting commit hashes. So I rebase my own
+    feature branch on main to keep it clean before a pull request, but I never rebase a shared branch that others
+    have pulled, because it forces everyone to deal with rewritten history.
+  mistakes:
+    - Force-pushing a rebased shared branch.
+  follow_up: How do you undo a commit that is already pushed?
+  spoken: >-
+    Merge joins branches with a merge commit and keeps history. Rebase moves my commits on top of another branch
+    for a clean line. I only rebase my own branches, never shared ones.

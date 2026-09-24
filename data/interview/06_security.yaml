@@ -1,0 +1,128 @@
+# DevSecOps and security. Schema: agents/interview_agent/bank.py
+- id: devsecops-shift-left
+  section: core
+  skills: [devsecops, sast]
+  difficulty: medium
+  q: What does "shift left" mean in DevSecOps, and what checks do you put in a pipeline?
+  tests: Security built into delivery.
+  points:
+    - [find security issues early in development, early, shift left, developer]
+    - [SAST on code, sast, static analysis, sonarqube, semgrep, codeql]
+    - [dependency and SCA scanning, dependency, sca, snyk, dependabot]
+    - [container image scanning, trivy, image scan, container scan]
+    - [secret scanning, secret scan, gitleaks, trufflehog]
+    - [IaC scanning, tfsec, checkov, iac scan]
+  ideal: >-
+    Shift left means catching security problems as early as possible, when they are cheapest to fix, instead of a
+    security review at the end. In the pipeline: secret scanning (gitleaks) on every commit, SAST (Semgrep,
+    CodeQL or SonarQube) on the code, dependency scanning for known CVEs, IaC scanning with Checkov or tfsec,
+    and container scanning with Trivy before pushing images. Findings above an agreed severity fail the build, the
+    rest create tickets. DAST against staging and runtime detection cover what static checks miss.
+  mistakes:
+    - Failing the build on every low-severity finding, so teams start ignoring the tools.
+  follow_up: How do you handle a critical CVE that has no fix yet?
+  spoken: >-
+    Shift left means finding security problems early. In the pipeline I scan for secrets, scan the code with SAST,
+    check dependencies, scan Terraform, and scan images with Trivy.
+
+- id: sec-secret-leaked
+  section: scenario
+  skills: [secrets_management]
+  difficulty: medium
+  q: A developer accidentally pushed an AWS access key to a public GitHub repo. What do you do?
+  tests: Incident response for leaked secrets.
+  points:
+    - [revoke or rotate the key immediately, revoke, rotate, deactivate, disable]
+    - [check logs for misuse, cloudtrail, logs, misuse, activity]
+    - [removing the commit is not enough, history, not enough, already, cached, bots]
+    - [prevent with secret scanning and short-lived credentials, gitleaks, secret scan, pre-commit, oidc, short-lived]
+  ideal: >-
+    First, revoke or deactivate the key immediately, because bots scan public GitHub within minutes; deleting the
+    commit is not enough since the history and forks keep it. Then check CloudTrail for anything that key did since
+    the push and clean up any resources an attacker created, such as crypto-mining instances. I tell the security
+    team and treat it as an incident. To prevent it: pre-commit and CI secret scanning (gitleaks, GitHub push
+    protection) and removing long-lived keys in favour of roles and OIDC.
+  mistakes:
+    - Only deleting the commit and force-pushing.
+  follow_up: How do you rewrite Git history to remove the secret, and why is it still not enough?
+  spoken: >-
+    I disable the key right away, then check CloudTrail for any misuse. Deleting the commit is not enough. Then I
+    add secret scanning and move to short-lived credentials.
+
+- id: sec-vault
+  section: core
+  skills: [hashicorp_vault, secrets_management]
+  difficulty: medium
+  q: Why use a secrets manager like HashiCorp Vault instead of environment files?
+  tests: Secrets management maturity.
+  points:
+    - [central storage with access control, central, access control, polic]
+    - [audit logging, audit]
+    - [rotation and dynamic secrets, rotation, rotate, dynamic secret]
+    - [encryption, encrypt]
+    - [apps authenticate with an identity, kubernetes auth, approle, identity, managed identity]
+  ideal: >-
+    A secrets manager keeps secrets encrypted in one place with fine-grained policies and an audit log of who read
+    what. Vault can issue dynamic secrets, for example a database user created on demand with a short lease, so
+    nothing long-lived exists to leak, and it makes rotation routine. Applications authenticate with their
+    identity (Kubernetes service account, AppRole or a cloud managed identity) rather than a password in a file.
+    Environment files get copied, committed and never rotated.
+  mistakes:
+    - Storing the Vault token itself in the repository.
+  follow_up: How would a Kubernetes pod authenticate to Vault?
+  spoken: >-
+    Vault keeps secrets encrypted in one place, controls who can read them, logs every access and can rotate or
+    create short-lived secrets. Apps log in with their identity, not a password in a file.
+
+- id: sec-owasp
+  section: core
+  skills: [owasp]
+  difficulty: medium
+  q: Name some OWASP Top 10 risks and how you would reduce them.
+  tests: Application security awareness.
+  points:
+    - [broken access control, access control, authorization]
+    - [injection, injection, sql injection, parameteri]
+    - [cryptographic failures, cryptograph, encrypt, tls]
+    - [security misconfiguration, misconfig, default]
+    - [vulnerable components, vulnerable component, outdated, dependenc]
+  ideal: >-
+    Examples: broken access control (users reaching data they should not; fix with server-side authorisation
+    checks on every request), injection such as SQL injection (fix with parameterised queries and input
+    validation), cryptographic failures (enforce TLS, strong hashing like bcrypt or Argon2 for passwords),
+    security misconfiguration (default passwords, verbose errors, open storage; fix with hardened baselines and
+    IaC scanning), and vulnerable components (fix with dependency scanning and patching). A WAF helps, but it does
+    not replace fixing the code.
+  mistakes:
+    - Saying a WAF alone solves application security.
+  follow_up: How do you store user passwords safely?
+  spoken: >-
+    For example broken access control, injection, weak cryptography, misconfiguration and outdated libraries. I fix
+    them with proper authorisation checks, parameterised queries, TLS and strong hashing, hardened settings, and
+    dependency scanning.
+
+- id: sec-zero-trust-oidc
+  section: core
+  skills: [oidc, keycloak, zero_trust]
+  difficulty: hard
+  q: Explain OpenID Connect and how you would protect an API with Keycloak.
+  tests: Modern authentication.
+  points:
+    - [OIDC is an identity layer on OAuth2, oauth, identity layer, oauth2]
+    - [ID token and access token as JWT, jwt, id token, access token]
+    - [API validates signature, issuer, audience and expiry, signature, issuer, audience, expir, jwks]
+    - [roles or scopes for authorisation, role, scope, claim]
+    - [authorisation policies such as OPA, opa, rego, policy]
+  ideal: >-
+    OpenID Connect adds an identity layer to OAuth 2.0: after login, the identity provider (Keycloak here) issues an
+    ID token about the user and an access token for calling APIs, both usually signed JWTs. The API does not call
+    Keycloak on every request; it validates the token locally using Keycloak's public keys (JWKS): signature,
+    issuer, audience and expiry. Authorisation then uses roles or scopes in the token claims, and for richer rules
+    a policy engine such as OPA with Rego can decide per request. That fits zero trust: every request is
+    authenticated and authorised, whatever network it comes from.
+  mistakes:
+    - Trusting a JWT without verifying its signature.
+  follow_up: What is the difference between authentication and authorisation?
+  spoken: >-
+    OIDC is login on top of OAuth2. Keycloak gives the user a signed token. My API checks the signature, issuer,
+    audience and expiry, then uses roles in the token, or OPA, to decide what is allowed.

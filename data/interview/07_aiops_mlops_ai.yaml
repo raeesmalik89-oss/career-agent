@@ -1,0 +1,185 @@
+# AIOps, MLOps and AI engineering. Schema: agents/interview_agent/bank.py
+- id: aiops-what
+  section: core
+  skills: [aiops]
+  difficulty: easy
+  q: What is AIOps, and what problems does it solve?
+  tests: Understanding of the field, beyond buzzwords.
+  points:
+    - [apply ML and analytics to operations data, machine learning, ml, analytics, operations data]
+    - [anomaly detection, anomal]
+    - [event correlation and noise reduction, correlat, noise, dedup, group]
+    - [root cause analysis, root cause, rca]
+    - [automated remediation, remediat, self-heal, auto-heal, automat]
+  ideal: >-
+    AIOps applies machine learning and analytics to operations data such as metrics, logs, traces and events. The
+    main uses are anomaly detection instead of fixed thresholds, correlating thousands of alerts into a few
+    incidents to cut noise, helping root-cause analysis by linking symptoms to recent changes and dependencies, and
+    triggering automated remediation for well-understood problems. It only works on top of good observability
+    data, and automation needs guardrails and human approval for risky actions.
+  mistakes:
+    - Describing AIOps as a tool that replaces engineers.
+  follow_up: How would you avoid an auto-remediation loop making an incident worse?
+  spoken: >-
+    AIOps uses machine learning on monitoring data. It finds anomalies, groups many alerts into one incident, helps
+    find the root cause, and can fix known problems automatically, with safety limits.
+
+- id: aiops-anomaly-detection
+  section: core
+  skills: [anomaly_detection, isolation_forest]
+  difficulty: medium
+  q: How would you detect anomalies in service metrics, and how do you handle seasonality?
+  tests: Practical anomaly detection.
+  points:
+    - [baseline with statistics like z-score or moving average, z-score, moving average, baseline, standard deviation]
+    - [seasonality daily and weekly patterns, seasonal, daily, weekly, time of day]
+    - [ML methods like isolation forest, isolation forest, unsupervised]
+    - [tune for false positives, false positive, precision, threshold, tune]
+    - [feedback from on-call, feedback, label, human]
+  ideal: >-
+    I start simple: a rolling baseline (moving average and standard deviation, or z-scores) per metric. Real
+    traffic has daily and weekly seasonality, so I compare with the same time last week or decompose the series
+    (for example STL or Prophet), otherwise every Monday morning looks anomalous. For multivariate data, an
+    unsupervised model such as Isolation Forest scores how unusual a combination of metrics is. The hard part is
+    false positives, so I tune thresholds against past incidents, require the anomaly to persist for a few minutes,
+    and collect on-call feedback to improve.
+  mistakes:
+    - Jumping to deep learning before trying a simple baseline.
+  follow_up: How would you evaluate an anomaly detector without many labelled incidents?
+  spoken: >-
+    I start with a simple baseline like a moving average and z-score, compare with the same time last week for
+    daily patterns, and use Isolation Forest for many metrics. Then I tune it to avoid false alarms.
+
+- id: mlops-lifecycle
+  section: core
+  skills: [mlops, mlflow]
+  difficulty: medium
+  q: What is MLOps? Describe the lifecycle of a model in production.
+  tests: End-to-end ML delivery.
+  points:
+    - [versioned data and code, version, data, dvc]
+    - [experiment tracking and model registry, mlflow, experiment, registry]
+    - [automated training and evaluation pipeline, pipeline, train, evaluat]
+    - [deployment as a service, serve, api, deploy, endpoint]
+    - [monitoring for drift and performance, drift, monitor]
+    - [retraining, retrain]
+  ideal: >-
+    MLOps applies DevOps practices to machine learning. Data and code are versioned; training runs are tracked in a
+    tool like MLflow with parameters, metrics and artefacts; a pipeline trains and evaluates the model against a
+    baseline, and only a model that passes goes to the model registry. Deployment packages it as a container behind
+    an API (or batch job), rolled out like any service, ideally with a canary or shadow deployment. In production I
+    monitor latency and errors, plus data drift and prediction quality when labels arrive, and drift or decay
+    triggers retraining through the same pipeline.
+  mistakes:
+    - Stopping the story at "deploy the model".
+  follow_up: What is the difference between data drift and concept drift?
+  spoken: >-
+    MLOps is DevOps for models. We version data and code, track experiments in MLflow, train and test in a
+    pipeline, deploy the model as an API, then monitor for drift and retrain when needed.
+
+- id: mlops-drift
+  section: core
+  skills: [mlops, machine_learning]
+  difficulty: medium
+  q: What is model drift, and how do you detect it?
+  tests: Production ML awareness.
+  points:
+    - [data drift - input distribution changes, data drift, input, distribution, covariate]
+    - [concept drift - the relationship changes, concept drift, relationship]
+    - [statistical tests like PSI or KS, psi, population stability, ks test, kolmogorov]
+    - [monitor prediction quality when labels arrive, labels, ground truth, accuracy, performance]
+    - [retrain or alert, retrain, alert]
+  ideal: >-
+    Data drift means the input distribution changes, for example new patient demographics or a new device sending
+    readings in different units. Concept drift means the relationship between inputs and the target changes, so the
+    same inputs should now lead to different predictions. I detect data drift by comparing live feature
+    distributions with the training data using statistics like PSI or the Kolmogorov-Smirnov test, and concept
+    drift by tracking accuracy once true labels arrive. Crossing a threshold raises an alert or triggers
+    retraining, with a human check for high-risk models such as clinical ones.
+  mistakes:
+    - Monitoring only CPU and latency of the model service.
+  follow_up: Why is drift especially risky for healthcare models?
+  spoken: >-
+    Data drift is when the input data changes. Concept drift is when the meaning changes, so old patterns stop
+    working. I compare live data with training data using tests like PSI, watch accuracy, and retrain.
+
+- id: ai-rag
+  section: core
+  skills: [rag, llm, vector_database]
+  difficulty: medium
+  q: What is Retrieval-Augmented Generation, and why use it?
+  tests: Modern AI engineering knowledge (a common gap for DevOps profiles).
+  points:
+    - [retrieve relevant documents and add them to the prompt, retriev, context, prompt]
+    - [embeddings and a vector database, embedding, vector]
+    - [chunking documents, chunk]
+    - [reduces hallucination and uses private or fresh data, hallucinat, private, up to date, fresh]
+    - [evaluate retrieval and answers, evaluat, relevance, grounded]
+  ideal: >-
+    RAG answers questions with an LLM grounded in your own documents. Offline, documents are split into chunks,
+    turned into embeddings and stored in a vector database such as pgvector or Pinecone. At query time the question
+    is embedded, the most similar chunks are retrieved (often combined with keyword search and re-ranking), and
+    they are put into the prompt with an instruction to answer only from them and cite sources. It lets the model
+    use private and up-to-date data without retraining and reduces hallucinations. It needs evaluation of both
+    retrieval quality and answer faithfulness, and care with access control on the documents.
+  mistakes:
+    - Thinking RAG retrains or fine-tunes the model.
+  follow_up: When would you fine-tune instead of using RAG?
+  spoken: >-
+    RAG means we first search our own documents for the relevant parts, using embeddings in a vector database, and
+    give them to the LLM in the prompt. The model then answers from real data, so it hallucinates less.
+  red_flags:
+    - {pattern: "rag (retrains|fine-?tunes)", message: "RAG does not retrain the model; it adds retrieved context to the prompt."}
+
+- id: ai-llm-production
+  section: core
+  skills: [llm, ai_systems]
+  difficulty: hard
+  q: What operational concerns come with running an LLM feature in production?
+  tests: LLMOps thinking, where DevOps skills transfer.
+  points:
+    - [latency and cost per token, latency, cost, token]
+    - [rate limits and fallbacks, rate limit, fallback, retry, timeout]
+    - [prompt injection and data leakage, prompt injection, injection, leak, pii]
+    - [evaluation and monitoring of output quality, evaluat, quality, monitor]
+    - [caching, cache]
+    - [logging and tracing prompts safely, log, trace, observab]
+  ideal: >-
+    Latency and cost scale with tokens, so I set budgets, cache repeated answers, choose smaller models where they
+    are good enough, and stream responses. Provider APIs have rate limits and outages, so calls need timeouts,
+    retries with backoff and a fallback. Security: untrusted input can carry prompt injection, so the model gets no
+    more tools or data than needed, outputs are validated against a schema, and personal data is kept out of prompts
+    and logs. Quality drifts silently, so there is an evaluation set run on every prompt or model change, plus
+    monitoring of production outputs and user feedback. Everything is traced like any other dependency.
+  mistakes:
+    - Treating the model's output as trusted input to other systems.
+  follow_up: How would you defend against prompt injection in a document-reading agent?
+  spoken: >-
+    I watch latency and token cost, handle rate limits with retries and fallbacks, protect against prompt injection
+    and data leaks, test output quality with an evaluation set, and monitor it in production.
+
+- id: ml-overfitting
+  section: core
+  skills: [machine_learning, scikit_learn]
+  difficulty: easy
+  q: What is overfitting, and how do you prevent it?
+  tests: ML fundamentals.
+  points:
+    - [model learns noise and fails on new data, noise, new data, unseen, generaliz]
+    - [train validation test split, validation, test set, split]
+    - [cross-validation, cross-validation, cross validation, k-fold]
+    - [regularisation and simpler models, regulari, simpler, pruning, max_depth]
+    - [more data or early stopping, more data, early stopping]
+  ideal: >-
+    Overfitting is when a model learns the noise in its training data, so it scores very well on training data but
+    badly on new data. I detect it by comparing training and validation scores on a proper split, or with k-fold
+    cross-validation, and I keep a final test set untouched. To prevent it: simpler models or regularisation (L1/L2,
+    limiting tree depth), early stopping, more or better data, and for ensembles like XGBoost, tuning learning rate
+    and depth. In clinical data, leakage between train and test (the same patient in both) is a common hidden cause
+    of results that look too good.
+  mistakes:
+    - Tuning on the test set.
+  follow_up: What is data leakage? Give an example.
+  spoken: >-
+    Overfitting means the model memorises the training data and fails on new data. I check with a validation set or
+    cross-validation, and prevent it with simpler models, regularisation, early stopping and more data.

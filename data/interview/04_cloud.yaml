@@ -1,0 +1,183 @@
+# AWS and Azure. Schema: agents/interview_agent/bank.py
+- id: aws-vpc-design
+  section: core
+  skills: [aws, aws_vpc]
+  difficulty: medium
+  q: Design a basic VPC for a web application with a database.
+  tests: Cloud networking fundamentals.
+  points:
+    - [public and private subnets, public subnet, private subnet]
+    - [multiple availability zones, availability zone, multi-az, az]
+    - [internet gateway and NAT gateway, internet gateway, nat]
+    - [security groups between tiers, security group]
+    - [database not publicly reachable, private, not public, no public]
+  ideal: >-
+    One VPC across at least two Availability Zones. Public subnets hold only the load balancer and a NAT gateway,
+    with a route to the Internet Gateway. Private subnets hold the application instances or containers, which
+    reach the internet outbound through NAT. Separate private subnets hold the database (for example RDS Multi-AZ)
+    with no internet route at all. Security groups chain the tiers: the ALB accepts 443 from the internet, the app
+    accepts traffic only from the ALB's security group, and the database only from the app's security group.
+    Admin access goes through SSM Session Manager rather than open SSH.
+  mistakes:
+    - Putting the database in a public subnet.
+    - Opening SSH to 0.0.0.0/0.
+  follow_up: How would private instances download updates without being reachable from the internet?
+  spoken: >-
+    I use two availability zones, public subnets only for the load balancer and NAT, private subnets for the app
+    and the database, and security groups so each layer only accepts traffic from the one in front.
+  red_flags:
+    - {pattern: "0\\.0\\.0\\.0/0.{0,30}(22|ssh)|(22|ssh).{0,30}0\\.0\\.0\\.0/0", message: "SSH open to the whole internet is a red flag; use SSM or a bastion with restricted IPs."}
+
+- id: aws-iam-basics
+  section: core
+  skills: [aws, iam]
+  difficulty: medium
+  q: Explain IAM users, roles and policies, and how an EC2 instance should access S3.
+  tests: Cloud identity basics.
+  points:
+    - [policies define permissions, policy, permission, allow, deny]
+    - [roles are assumed and give temporary credentials, role, assume, temporary]
+    - [instance profile for EC2, instance profile, attach a role, iam role]
+    - [least privilege, least privilege, specific bucket, only]
+    - [no access keys on servers, access key, hard-coded, hardcoded]
+  ideal: >-
+    Policies are JSON documents that allow or deny actions on resources. Users are long-lived identities for people
+    (ideally federated through SSO instead). Roles are assumed and hand out temporary credentials, which is how
+    services should authenticate. For EC2 to read S3, I attach an IAM role through an instance profile with a policy
+    allowing only the needed actions on that specific bucket, so the SDK picks up rotating credentials
+    automatically and no access keys are ever stored on the server.
+  mistakes:
+    - Putting access keys in the application config.
+    - Granting s3:* on all buckets.
+  follow_up: How would a pod in EKS get access to S3?
+  spoken: >-
+    Policies say what is allowed. Roles give temporary credentials. For EC2 I attach a role with a small policy for
+    just that bucket, so there are no keys stored on the server.
+
+- id: aws-ha-web-app
+  section: design
+  skills: [aws, auto_scaling, load_balancing]
+  difficulty: medium
+  q: How would you make a web application on AWS highly available?
+  tests: Availability thinking on AWS.
+  points:
+    - [multiple availability zones, availability zone, multi-az]
+    - [load balancer with health checks, load balancer, alb, health check]
+    - [auto scaling group, auto scaling, asg]
+    - [managed database with failover, rds, multi-az, replica, failover]
+    - [stateless app servers, stateless, session, s3]
+    - [backups and monitoring, backup, cloudwatch, alarm, monitoring]
+  ideal: >-
+    Spread everything across at least two Availability Zones. An Application Load Balancer with health checks sends
+    traffic only to healthy instances, and an Auto Scaling Group replaces failed ones and scales with load. App
+    servers are stateless, with sessions in ElastiCache or the database and files in S3, so any instance can be
+    lost. The database is RDS Multi-AZ with automatic failover and backups. CloudWatch alarms and a tested runbook
+    cover the rest. For region-level failure you add backups or replicas in a second region, which is a cost and
+    complexity decision.
+  mistakes:
+    - Keeping user uploads on the instance's local disk.
+  follow_up: What would you add to survive a whole region going down?
+  spoken: >-
+    I use at least two availability zones, a load balancer with health checks, an auto scaling group, stateless
+    servers, and a Multi-AZ database, plus monitoring and backups.
+
+- id: aws-s3-security
+  section: core
+  skills: [aws_s3, aws]
+  difficulty: easy
+  q: How do you secure an S3 bucket?
+  tests: Common cloud security.
+  points:
+    - [block public access, block public access, public access]
+    - [bucket policies and IAM least privilege, bucket policy, least privilege, iam]
+    - [encryption at rest and in transit, encrypt, kms, sse, tls, https]
+    - [versioning and logging, versioning, access log, cloudtrail]
+  ideal: >-
+    Turn on Block Public Access at account and bucket level, and grant access only through IAM roles and a bucket
+    policy with least privilege. Enable default encryption (SSE-S3 or SSE-KMS) and require TLS in the bucket policy.
+    Enable versioning, and Object Lock where deletion must be prevented, plus lifecycle rules. Log access with
+    CloudTrail data events or server access logs, and share objects temporarily with pre-signed URLs instead of
+    making them public.
+  mistakes:
+    - Making a bucket public to share one file.
+  follow_up: How would you give a partner temporary access to one file?
+  spoken: >-
+    I block public access, use IAM and bucket policies with least privilege, turn on encryption and versioning, and
+    log access. For sharing I use pre-signed URLs.
+
+- id: azure-aks-basics
+  section: core
+  skills: [aks, azure, kubernetes]
+  difficulty: medium
+  q: What do you configure when you create a production AKS cluster?
+  tests: Managed Kubernetes on Azure.
+  points:
+    - [node pools system and user, node pool, system pool, user pool]
+    - [networking with Azure CNI and network policy, azure cni, cni, network polic]
+    - [Entra ID integration and RBAC, entra, azure ad, aad, rbac]
+    - [managed identity and workload identity, managed identity, workload identity]
+    - [ingress or Application Gateway, application gateway, agic, ingress]
+    - [monitoring with Container Insights, container insights, azure monitor, log analytics]
+  ideal: >-
+    I separate a system node pool from user node pools and enable the cluster autoscaler, spread across
+    availability zones. Networking uses Azure CNI with network policies, ideally a private API server. Access
+    uses Microsoft Entra ID integration with Kubernetes RBAC, and workloads use workload identity (managed
+    identities) instead of stored secrets, with Key Vault through the CSI driver. Ingress is through NGINX or
+    Application Gateway. Container Insights with Log Analytics or Managed Prometheus gives monitoring, and the
+    whole cluster is defined in Terraform.
+  mistakes:
+    - Creating it by hand in the portal with no code.
+  follow_up: How do pods in AKS read secrets from Key Vault?
+  spoken: >-
+    I use separate system and user node pools with autoscaling, Azure CNI with network policies, Entra ID with RBAC,
+    workload identity for secrets, an ingress, and Azure Monitor, all created with Terraform.
+
+- id: azure-traffic-manager-app-gateway
+  section: core
+  skills: [azure_traffic_manager, azure_app_gateway, load_balancing]
+  difficulty: medium
+  q: What is the difference between Azure Traffic Manager and Application Gateway?
+  tests: Azure load-balancing options.
+  points:
+    - [Traffic Manager is DNS based and global, dns, global, region]
+    - [Application Gateway is a layer 7 regional load balancer, layer 7, l7, http, regional]
+    - [App Gateway has path routing and WAF, path, waf, url]
+    - [they can be combined, combine, together, both]
+  ideal: >-
+    Traffic Manager is a DNS-based global service: it answers DNS queries with the endpoint of the healthiest or
+    nearest region, using priority, performance or weighted routing, but traffic never passes through it.
+    Application Gateway is a regional layer-7 load balancer that terminates HTTP(S), routes by host and path, and
+    can include a Web Application Firewall. A common multi-region design uses Traffic Manager (or Front Door) to
+    choose a region and an Application Gateway in each region to route to the services.
+  mistakes:
+    - Saying Traffic Manager proxies the traffic.
+  follow_up: Where does Azure Front Door fit?
+  spoken: >-
+    Traffic Manager uses DNS to pick a region. Application Gateway is a web load balancer inside a region with path
+    routing and a firewall. You can use both together.
+
+- id: cloud-cost
+  section: scenario
+  skills: [aws, azure]
+  difficulty: medium
+  q: The cloud bill doubled this month. How do you find out why and reduce it?
+  tests: Cost awareness (FinOps).
+  points:
+    - [use cost explorer or cost analysis by service and tags, cost explorer, cost analysis, tag]
+    - [find idle or oversized resources, idle, oversized, right-siz, unused]
+    - [data transfer and NAT costs, data transfer, egress, nat]
+    - [reserved instances savings plans or spot, reserved, savings plan, spot]
+    - [budgets and alerts, budget, alert]
+  ideal: >-
+    I open Cost Explorer (or Azure Cost Analysis), group by service, account and tags, and compare with last month
+    to find what grew. Typical causes: forgotten or oversized instances and clusters, unattached disks and old
+    snapshots, heavy data transfer or NAT gateway traffic, and logs retained forever. Fixes are right-sizing,
+    scheduling dev environments off at night, storage lifecycle rules, and Savings Plans or reserved capacity for
+    steady workloads and spot for fault-tolerant ones. Then I add budgets with alerts and mandatory tags so the next
+    spike is caught in days, not at the end of the month.
+  mistakes:
+    - Cutting resources before understanding what grew.
+  follow_up: Why can NAT gateway costs surprise teams?
+  spoken: >-
+    I use Cost Explorer grouped by service and tags to find what grew. Usually it is idle or oversized resources or
+    data transfer. I right-size, use savings plans, and set budget alerts.

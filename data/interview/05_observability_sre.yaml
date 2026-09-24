@@ -1,0 +1,178 @@
+# Monitoring, observability and SRE. Schema: agents/interview_agent/bank.py
+- id: obs-three-pillars
+  section: core
+  skills: [observability, monitoring]
+  difficulty: easy
+  q: What is the difference between monitoring and observability?
+  tests: Core vocabulary.
+  points:
+    - [metrics, metric]
+    - [logs, log]
+    - [traces, trace, tracing]
+    - [monitoring answers known questions, known, dashboard, alert]
+    - [observability lets you ask new questions, unknown, new questions, why, explore]
+  ideal: >-
+    Monitoring watches for known failure modes: predefined metrics, dashboards and alerts that tell you something
+    is wrong. Observability is the ability to understand why, including for problems you did not predict, by
+    exploring rich telemetry: metrics (numbers over time, cheap to store), logs (detailed events) and traces (the
+    path of one request across services), ideally correlated by a trace ID. OpenTelemetry is the standard way to
+    collect all three.
+  mistakes:
+    - Treating them as the same thing.
+  follow_up: How would you trace a slow request across three microservices?
+  spoken: >-
+    Monitoring tells you something is wrong, using known metrics and alerts. Observability helps you find out why,
+    using metrics, logs and traces together.
+
+- id: prometheus-how
+  section: core
+  skills: [prometheus]
+  difficulty: medium
+  q: How does Prometheus work?
+  tests: Prometheus internals.
+  points:
+    - [pull model scraping endpoints, pull, scrape, /metrics]
+    - [time series database with labels, time series, label]
+    - [PromQL queries, promql, rate]
+    - [Alertmanager handles alerts, alertmanager]
+    - [service discovery, service discovery, kubernetes_sd, targets]
+    - [high cardinality problem, cardinality]
+  ideal: >-
+    Prometheus pulls metrics: it scrapes HTTP /metrics endpoints on a schedule, finding targets through service
+    discovery (for example Kubernetes), and stores samples as time series identified by a metric name and labels.
+    You query with PromQL, for example rate(http_requests_total[5m]) for per-second request rates. Alerting rules
+    are evaluated by Prometheus and firing alerts go to Alertmanager, which groups, silences and routes them to
+    Slack or PagerDuty. The main pitfall is high-cardinality labels, like user IDs, which explode memory. For
+    long-term storage you add Thanos, Mimir or a managed service.
+  mistakes:
+    - Putting user IDs or request IDs in labels.
+  follow_up: Why do you use rate() on a counter instead of its raw value?
+  spoken: >-
+    Prometheus pulls metrics from each service's /metrics endpoint and stores them as time series with labels. You
+    query with PromQL, and Alertmanager sends the alerts.
+
+- id: sre-slo-sli
+  section: core
+  skills: [sre, slo]
+  difficulty: medium
+  q: Explain SLI, SLO, SLA and error budgets.
+  tests: Core SRE concepts.
+  points:
+    - [SLI is a measurement, sli, indicator, measure]
+    - [SLO is the target, slo, objective, target]
+    - [SLA is the contract with consequences, sla, contract, penalt, customer]
+    - [error budget is the allowed unreliability, error budget, allowed]
+    - [error budget guides release speed, freeze, slow down, release, feature]
+  ideal: >-
+    An SLI is a measured indicator of user experience, such as the share of requests that succeed in under 300 ms.
+    An SLO is the target for it over a window, for example 99.9% over 30 days. An SLA is the external contract with
+    customers, with penalties, and is usually looser than the SLO. The error budget is what the SLO allows to fail:
+    99.9% leaves 0.1%, about 43 minutes a month. When the budget is healthy, the team ships faster; when it is
+    burned, they slow releases and spend time on reliability. Alerts are best based on burn rate.
+  mistakes:
+    - Setting a 100% SLO.
+  follow_up: How much downtime per month does 99.9% allow?
+  spoken: >-
+    An SLI is what we measure, an SLO is our target, an SLA is the promise to customers. The error budget is how
+    much failure the target allows; if we use it up, we slow down releases.
+
+- id: sre-alerting-good
+  section: core
+  skills: [monitoring, incident_management]
+  difficulty: medium
+  q: What makes a good alert? How do you avoid alert fatigue?
+  tests: Alert design maturity.
+  points:
+    - [alert on user impact or symptoms, symptom, user impact, customer]
+    - [actionable, action, runbook]
+    - [severity and routing, severity, page, ticket, routing]
+    - [remove or tune noisy alerts, noisy, tune, fatigue, delete]
+    - [use SLO burn-rate alerts, burn rate, slo]
+  ideal: >-
+    A good alert means a human must do something now, so it is actionable, links to a runbook, and fires on
+    symptoms users feel (error rate, latency, SLO burn rate) rather than on every cause like high CPU. Severity
+    decides routing: pages only for urgent user-facing problems, tickets or dashboards for the rest. Alerts are
+    grouped and deduplicated, and after each on-call week the team reviews which alerts were noise and tunes or
+    deletes them. Otherwise people start ignoring pages, which is how real incidents get missed.
+  mistakes:
+    - Paging on high CPU with no user impact.
+  follow_up: Give an example of a burn-rate alert.
+  spoken: >-
+    A good alert is about real user impact and tells you what to do, with a runbook. Only urgent things page
+    someone. We regularly remove noisy alerts so people keep trusting them.
+
+- id: sre-incident-response
+  section: scenario
+  skills: [incident_management, sre]
+  difficulty: medium
+  q: Production is down. You are on call. What do you do?
+  tests: Calm incident handling.
+  points:
+    - [acknowledge and assess impact, acknowledge, impact, severity]
+    - [communicate and assign roles, communicat, incident commander, status page, update]
+    - [mitigate first such as rollback, mitigat, rollback, roll back, restore service]
+    - [check recent changes, recent change, deploy, what changed]
+    - [postmortem without blame, postmortem, post-mortem, blameless, root cause]
+  ideal: >-
+    I acknowledge the page, confirm the impact and severity, and open an incident channel so there is one place for
+    updates; for a big incident someone acts as incident commander and someone else communicates with stakeholders.
+    My first goal is to restore service, not to find the perfect root cause: I check what changed recently (a
+    deploy, a config change, a dependency) and mitigate, often by rolling back, failing over or scaling. I post
+    regular updates. Once stable, I write a blameless postmortem with a timeline, root cause and action items so it
+    does not happen again.
+  mistakes:
+    - Debugging deeply before mitigating while users are down.
+    - Staying silent instead of updating stakeholders.
+  follow_up: What goes into a good postmortem?
+  spoken: >-
+    I confirm the impact, open an incident channel and keep people updated. First I restore service, often by
+    rolling back the last change. After that I write a blameless postmortem with actions.
+
+- id: logging-centralised
+  section: core
+  skills: [logging, elk]
+  difficulty: medium
+  q: How would you set up centralised logging for many services?
+  tests: Log pipeline design.
+  points:
+    - [agents ship logs, fluent bit, fluentd, filebeat, agent, promtail]
+    - [store and search, elasticsearch, loki, opensearch, log analytics]
+    - [structured JSON logs, structured, json]
+    - [correlation or trace ids, correlation id, trace id, request id]
+    - [retention and cost, retention, cost, sampling]
+    - [no secrets or personal data, pii, secret, sensitive, redact]
+  ideal: >-
+    Applications write structured JSON logs to stdout, including a request or trace ID. A node agent such as Fluent
+    Bit collects them and ships them to a central store: Elasticsearch/OpenSearch with Kibana, Grafana Loki, or a
+    cloud service like Azure Log Analytics. Kibana or Grafana is used for search and dashboards, and logs link to
+    traces through the trace ID. I set retention by value (short for debug logs, longer for audit logs) to control
+    cost, and make sure secrets and personal data are never logged, or are redacted.
+  mistakes:
+    - Logging passwords, tokens or patient data.
+  follow_up: Loki or Elasticsearch - how would you choose?
+  spoken: >-
+    Apps log structured JSON with a request ID. An agent like Fluent Bit ships the logs to a central store like
+    Loki or Elasticsearch. I set retention to control cost and never log secrets.
+
+- id: sre-toil
+  section: core
+  skills: [sre]
+  difficulty: easy
+  q: What is toil in SRE, and how do you reduce it?
+  tests: SRE mindset.
+  points:
+    - [manual repetitive work, manual, repetitive, repeat]
+    - [scales with the service and has no lasting value, scale, lasting, no value]
+    - [automate it, automat, script]
+    - [measure and cap toil, measure, 50, cap, percentage]
+  ideal: >-
+    Toil is manual, repetitive, automatable work that grows with the size of the service and leaves no lasting
+    improvement, such as manually restarting a stuck job every week or creating accounts by hand. SRE teams measure
+    it and cap it, classically at 50% of their time, and spend the rest on engineering that removes it: automation,
+    self-healing, better tooling, or fixing the root cause so the task disappears.
+  mistakes:
+    - Calling all operations work toil.
+  follow_up: Give an example of toil you automated.
+  spoken: >-
+    Toil is boring manual work that repeats and grows as the system grows. I reduce it with scripts, automation and
+    fixing root causes.

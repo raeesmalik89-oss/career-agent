@@ -1,0 +1,203 @@
+# Infrastructure as Code and CI/CD. Schema: agents/interview_agent/bank.py
+- id: tf-state
+  section: core
+  skills: [terraform, iac]
+  difficulty: medium
+  q: What is Terraform state, and how do you manage it in a team?
+  tests: Terraform fundamentals and team safety.
+  points:
+    - [state maps config to real resources, state, maps, real resources, tfstate]
+    - [remote backend, remote backend, s3, azure storage, backend]
+    - [state locking, lock, dynamodb, locking]
+    - [state contains secrets so protect it, secret, sensitive, encrypt]
+    - [never edit by hand, terraform state mv, import, never edit]
+  ideal: >-
+    Terraform state records which real resources correspond to each resource in the code, plus their attributes,
+    so Terraform can calculate a plan. In a team it must live in a remote backend such as an S3 bucket with
+    DynamoDB locking or an Azure Storage account with blob leases, so two people cannot apply at once and nobody
+    works from an old local copy. State can contain secrets, so the backend is encrypted and access-controlled.
+    I never edit it by hand; I use terraform import, state mv or moved blocks for refactoring.
+  mistakes:
+    - Committing terraform.tfstate to Git.
+  follow_up: What would you do if someone changed a resource manually in the console?
+  spoken: >-
+    State is Terraform's record of what it created. In a team I keep it in a remote backend with locking and
+    encryption, never in Git, and I never edit it by hand.
+  red_flags:
+    - {pattern: "(commit|push|store).{0,20}state.{0,20}git|git.{0,20}tfstate", message: "State must not go into Git: it can hold secrets and causes conflicts."}
+
+- id: tf-modules-envs
+  section: core
+  skills: [terraform, iac]
+  difficulty: medium
+  q: How do you structure Terraform for several environments like dev, staging and production?
+  tests: Reusable, safe IaC design.
+  points:
+    - [reusable modules, module]
+    - [separate state per environment, separate state, per environment, workspace]
+    - [variables or tfvars per environment, tfvars, variables]
+    - [plan in CI and review before apply, plan, pull request, review, pipeline]
+    - [pin provider and module versions, pin, version]
+  ideal: >-
+    I put reusable building blocks (network, cluster, database) in versioned modules and create a thin root
+    configuration per environment that calls them with different variables. Each environment has its own state
+    and credentials, so a mistake in dev cannot touch production. Provider and module versions are pinned. Changes
+    go through a pull request where CI runs fmt, validate, tflint, a security scan such as tfsec or Checkov, and
+    terraform plan, and apply only happens after review, ideally from the pipeline rather than a laptop.
+  mistakes:
+    - Using one state file for every environment.
+  follow_up: Workspaces or separate directories - which do you prefer and why?
+  spoken: >-
+    I write reusable modules and a small folder per environment with its own variables and its own state. Every
+    change goes through a pull request with terraform plan before apply.
+
+- id: tf-drift
+  section: scenario
+  skills: [terraform]
+  difficulty: medium
+  q: terraform plan shows changes nobody made in code. What happened and what do you do?
+  tests: Handling drift calmly.
+  points:
+    - [drift from manual changes, drift, manual, console, clickops]
+    - [investigate who and why, audit, cloudtrail, activity log, who changed]
+    - [decide to import to code or revert, import, update the code, revert, apply]
+    - [prevent with permissions and policy, permission, read-only, policy, scheduled plan]
+  ideal: >-
+    That is drift: someone or something changed the infrastructure outside Terraform, for example in the console,
+    or a provider default changed. I first find out who and why from CloudTrail or the Azure Activity Log, because
+    the change might be an emergency fix. Then I decide: if it was right, I put it into code so plan is clean
+    again; if not, I apply to bring the infrastructure back. To prevent it, people get read-only console access in
+    production and a scheduled pipeline runs plan to detect drift early.
+  mistakes:
+    - Running apply immediately and undoing an emergency fix.
+  follow_up: How would you bring an existing manually created resource under Terraform?
+  spoken: >-
+    That is drift from a manual change. I check the audit logs to see who changed it and why, then either add the
+    change to code or apply to revert it. Then I limit manual access.
+
+- id: iac-terraform-vs-ansible
+  section: core
+  skills: [terraform, ansible]
+  difficulty: easy
+  q: Terraform and Ansible - what is each one for?
+  tests: Tool boundaries.
+  points:
+    - [Terraform provisions infrastructure, provision, infrastructure, create resources]
+    - [Ansible configures servers, configur, packages, servers]
+    - [declarative with state vs procedural playbooks, declarative, state, playbook, procedural]
+    - [agentless over SSH, agentless, ssh]
+  ideal: >-
+    Terraform is for provisioning: it declaratively creates and changes cloud resources such as networks, VMs,
+    clusters and databases, and keeps state to know what exists. Ansible is mainly for configuration management:
+    it connects agentlessly over SSH and runs playbooks that install packages, write config files and restart
+    services. They combine well: Terraform builds the VMs, Ansible configures them. With containers and immutable
+    images, much of Ansible's job moves into Dockerfiles or Packer images.
+  mistakes:
+    - Saying they are interchangeable.
+  follow_up: What does idempotent mean for an Ansible task?
+  spoken: >-
+    Terraform creates the infrastructure, like networks and servers. Ansible configures what is inside the
+    servers, like packages and files, over SSH. I often use both together.
+
+- id: cicd-pipeline-design
+  section: core
+  skills: [ci_cd]
+  difficulty: medium
+  q: Describe a good CI/CD pipeline for a containerised web service.
+  tests: End-to-end delivery thinking.
+  points:
+    - [build and unit tests on every commit, unit test, test, lint, build]
+    - [build and scan the image, image, scan, trivy, sast]
+    - [push to a registry with an immutable tag, registry, tag, commit sha, immutable]
+    - [deploy to staging and run integration or smoke tests, staging, smoke, integration]
+    - [production with approval or progressive rollout, approval, canary, blue, rollout, gate]
+    - [fast feedback and rollback, rollback, fast, feedback]
+  ideal: >-
+    On every pull request: lint, unit tests, static analysis and a dependency scan, so feedback comes in minutes.
+    On merge: build the image once, scan it with Trivy, tag it with the commit SHA (never just latest) and push it
+    to the registry. The same image is deployed to staging, where integration and smoke tests run. Production uses
+    a manual approval or a progressive rollout such as canary, with health checks and automatic rollback. Secrets
+    come from the CI secret store or OIDC federation, not from the repository, and every deployment is traceable
+    to a commit.
+  mistakes:
+    - Rebuilding the image separately for each environment.
+  follow_up: How would you speed up a pipeline that takes 40 minutes?
+  spoken: >-
+    Every change runs lint and tests. Then we build the image once, scan it, tag it with the commit, and deploy the
+    same image to staging and then production with an approval and a rollback plan.
+
+- id: cicd-github-actions-secrets
+  section: core
+  skills: [github_actions, secrets_management]
+  difficulty: medium
+  q: How do you handle cloud credentials in GitHub Actions safely?
+  tests: CI security.
+  points:
+    - [OIDC federation instead of long-lived keys, oidc, federat, workload identity]
+    - [encrypted secrets and environments, secrets., environment, repository secret]
+    - [least-privilege roles, least privilege, role, scoped]
+    - [protect against forks and pull request abuse, fork, pull_request_target, untrusted]
+    - [pin actions to a commit, pin, sha, third-party action]
+  ideal: >-
+    Best is to avoid stored keys entirely: GitHub Actions supports OIDC, so the workflow gets a short-lived token
+    and assumes an AWS role or Azure federated identity scoped to that repository and branch. If a secret is
+    unavoidable it goes into GitHub encrypted secrets, ideally tied to a protected environment with required
+    reviewers. The role has least privilege. I pin third-party actions to a commit SHA, set minimal
+    GITHUB_TOKEN permissions, and never expose secrets to workflows triggered by pull requests from forks.
+  mistakes:
+    - Storing an AWS access key with admin rights as a repository secret.
+  follow_up: What is the risk of pull_request_target?
+  spoken: >-
+    I use OIDC so GitHub gets short-lived cloud credentials instead of stored keys. Roles get only the permissions
+    they need, and I pin actions and protect secrets from forked pull requests.
+
+- id: cicd-deploy-strategies
+  section: core
+  skills: [ci_cd, kubernetes]
+  difficulty: medium
+  q: Compare rolling, blue-green and canary deployments.
+  tests: Release risk management.
+  points:
+    - [rolling replaces instances gradually, rolling, gradual]
+    - [blue-green switches all traffic between two environments, blue-green, blue green, switch]
+    - [canary sends a small percentage first, canary, small percentage, subset]
+    - [trade-offs of cost, speed and risk, cost, double, risk, trade-off]
+    - [automatic rollback on metrics, metric, rollback, error rate]
+  ideal: >-
+    A rolling update replaces instances a few at a time: cheap and the Kubernetes default, but old and new versions
+    run together and rollback takes another rollout. Blue-green runs the new version beside the old one and
+    switches all traffic at once: instant rollback, but double the resources during the switch. Canary sends a small
+    share of traffic, say 5%, to the new version, compares error rates and latency, and increases gradually: the
+    lowest risk, but it needs good metrics and traffic splitting (a service mesh, ingress or Argo Rollouts). In all
+    cases, rollback should trigger automatically on bad metrics.
+  mistakes:
+    - Not mentioning how you decide the new version is healthy.
+  follow_up: How do database migrations fit into blue-green deployments?
+  spoken: >-
+    Rolling replaces pods little by little. Blue-green switches all traffic to a full new copy. Canary sends a
+    small part of traffic first. Canary is safest but needs good metrics.
+
+- id: cicd-slow-pipeline
+  section: scenario
+  skills: [ci_cd]
+  difficulty: medium
+  q: Your CI pipeline takes 40 minutes and developers are unhappy. How do you speed it up?
+  tests: Practical optimisation.
+  points:
+    - [measure where time goes, measure, which step, profile, timing]
+    - [cache dependencies and docker layers, cache]
+    - [run jobs in parallel, parallel, matrix, split]
+    - [run only what changed, changed, path filter, affected]
+    - [faster runners or move slow tests later, runner, nightly, later stage, larger]
+  ideal: >-
+    I measure first: which jobs and steps take the time. Then the usual wins: cache dependencies and Docker layers,
+    run independent jobs in parallel and split the test suite across runners, only run jobs for the parts of the
+    repository that changed, and move slow end-to-end tests to after merge or a nightly run while keeping fast
+    checks on every pull request. Bigger or self-hosted runners help if the machine is the bottleneck. I track the
+    duration over time so it does not creep back.
+  mistakes:
+    - Deleting tests to make it faster.
+  follow_up: How do you make Docker builds in CI faster?
+  spoken: >-
+    First I measure which steps are slow. Then I add caching, run jobs in parallel, only test what changed, and move
+    slow tests to a later stage.

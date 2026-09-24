@@ -1,0 +1,189 @@
+# System design and troubleshooting scenarios. Schema: agents/interview_agent/bank.py
+- id: design-url-shortener-infra
+  section: design
+  skills: [system_design, kubernetes]
+  difficulty: hard
+  q: Design the infrastructure for a URL shortener that handles 10,000 requests per second.
+  tests: Structured system design with infrastructure trade-offs.
+  points:
+    - [clarify requirements and read-heavy traffic, requirement, read-heavy, reads, ratio]
+    - [stateless API behind a load balancer, stateless, load balancer]
+    - [cache hot links, cache, redis, cdn]
+    - [database choice and scaling, database, key-value, replica, partition, shard]
+    - [autoscaling and multi-zone, autoscal, availability zone, multi-az, replicas]
+    - [monitoring and SLOs, monitor, slo, latency, metric]
+  ideal: >-
+    I start with requirements: redirects are read-heavy (maybe 100 reads per write), must be fast (under 50 ms) and
+    highly available; creating links is rarer. Design: a stateless API service in containers behind a load
+    balancer across availability zones, autoscaled on request rate. Redirects check a Redis cache first, since a
+    small share of links gets most traffic, and a CDN can cache redirects at the edge. Storage is a simple
+    key-value model: a managed key-value store like DynamoDB, or PostgreSQL with read replicas, partitioned by the
+    short code if needed. IDs come from a counter with base62 encoding or random codes with collision checks. I
+    finish with SLOs, dashboards on latency and cache hit rate, and rate limiting against abuse.
+  mistakes:
+    - Jumping into tools before clarifying requirements.
+  follow_up: How would you handle a single link going viral with 1 million requests a minute?
+  spoken: >-
+    First I clarify requirements: it is mostly reads and must be fast. Then a stateless API behind a load balancer
+    in several zones, Redis cache for popular links, a key-value database, autoscaling, and monitoring with SLOs.
+
+- id: design-monitoring-platform
+  section: design
+  skills: [observability, prometheus, grafana]
+  difficulty: hard
+  q: Design a monitoring and alerting platform for 50 microservices on Kubernetes.
+  tests: Observability architecture.
+  points:
+    - [metrics with Prometheus and long-term storage, prometheus, thanos, mimir, long-term]
+    - [logs pipeline, loki, fluent bit, elasticsearch, logs]
+    - [tracing with OpenTelemetry, opentelemetry, tracing, jaeger, tempo]
+    - [dashboards and alert routing, grafana, alertmanager, pagerduty, routing]
+    - [standard labels and golden signals, golden signals, red method, use method, latency, standard]
+    - [SLO based alerts, slo, burn rate]
+  ideal: >-
+    Metrics: kube-prometheus-stack with Prometheus scraping every service through ServiceMonitors, with Thanos or
+    Mimir for high availability and long retention. Logs: Fluent Bit to Loki (or OpenSearch). Traces: services
+    instrumented with OpenTelemetry, sent through the OTel Collector to Tempo or Jaeger. Grafana unifies them, with
+    links from metrics to logs to traces through shared labels and trace IDs. Every service exposes the golden
+    signals (latency, traffic, errors, saturation) with standard labels, has SLOs, and alerts on SLO burn rate
+    through Alertmanager to PagerDuty or Slack by team. The platform itself is monitored, and everything is deployed
+    as code.
+  mistakes:
+    - Only mentioning dashboards, not alerting or ownership.
+  follow_up: How do you stop one team's high-cardinality metrics from breaking Prometheus?
+  spoken: >-
+    Prometheus for metrics with long-term storage, Fluent Bit and Loki for logs, OpenTelemetry for traces, and
+    Grafana to see them together. Every service has golden signals and SLOs, and alerts go to the right team.
+
+- id: design-healthcare-pipeline
+  section: design
+  skills: [event_driven, kafka, healthcare_ai]
+  difficulty: hard
+  q: Design a real-time pipeline that scores ICU patient vitals for sepsis risk and alerts clinicians.
+  tests: Event-driven design with safety and compliance (a strong fit for a healthcare background).
+  points:
+    - [ingest vitals as events through Kafka, kafka, event, stream, topic]
+    - [scoring service consumes and writes results, consumer, model service, score]
+    - [low latency and reliability, latency, reliab, retry, dead letter]
+    - [alerting clinicians without alert fatigue, alert fatigue, threshold, escalat, clinician]
+    - [privacy and compliance, hipaa, phi, encrypt, access control, audit]
+    - [model monitoring and human oversight, drift, monitor, human, validation]
+  ideal: >-
+    Bedside devices or the EHR publish vitals as events to Kafka topics partitioned by patient, so each patient's
+    readings stay in order. A scoring service consumes them, keeps a short window of recent values per patient,
+    runs the model and publishes risk scores to another topic; results are stored in a database for the dashboard
+    and audit. Failed messages go to a dead-letter topic, and consumers are replicated for availability. Alerts go to
+    clinicians only when risk crosses a validated threshold for some minutes, with escalation, because alert fatigue
+    is a real clinical risk. Everything is protected health information: encryption in transit and at rest, strict
+    access control, audit logs and minimum necessary data (HIPAA or local equivalents). The model is monitored for
+    drift and its alerts support, not replace, clinical judgement.
+  mistakes:
+    - Ignoring privacy and clinical safety.
+  follow_up: What would you do if the model starts alerting twice as often as last week?
+  spoken: >-
+    Vitals come in as events through Kafka, a scoring service reads them, runs the model and publishes risk scores.
+    Clinicians get alerts only above a validated threshold. Everything is encrypted and audited, and the model is
+    monitored.
+
+- id: scn-high-latency
+  section: scenario
+  skills: [observability]
+  difficulty: medium
+  q: Users report the app is slow, but CPU and memory look normal. How do you investigate?
+  tests: Hypothesis-driven debugging beyond the obvious.
+  points:
+    - [confirm with latency metrics and percentiles, p95, p99, percentile, latency]
+    - [find which endpoint or dependency with tracing, trac, span, endpoint]
+    - [check the database and slow queries, database, slow query, query, index]
+    - [check external dependencies and network, dependency, external, network, dns]
+    - [check recent changes, recent change, deploy, release]
+    - [connection pools, locks or thread limits, pool, lock, thread, queue]
+  ideal: >-
+    I confirm and scope it: p95/p99 latency by endpoint, region and time, and whether it started with a deploy or
+    config change. Normal CPU and memory usually mean the service is waiting on something, so I use traces to see
+    which span is slow: often a database query (check slow query logs and missing indexes, lock waits), an external
+    API, DNS, or an exhausted connection pool or thread pool where requests queue. I fix the specific bottleneck,
+    for example an index, a larger pool, a timeout or a cache, and add an alert on the latency SLO.
+  mistakes:
+    - Adding more servers without finding the bottleneck.
+  follow_up: How would a missing database index show up in your metrics?
+  spoken: >-
+    I check p95 latency per endpoint and recent changes. If CPU is normal, the app is probably waiting on something,
+    so I use tracing to find the slow part, often the database, an external API or a full connection pool.
+
+- id: scn-deploy-broke-prod
+  section: scenario
+  skills: [ci_cd, incident_management]
+  difficulty: easy
+  q: A deployment went out 10 minutes ago and error rates jumped. What do you do?
+  tests: Prioritising recovery.
+  points:
+    - [roll back first, roll back, rollback, revert]
+    - [communicate, communicat, team, incident channel, update]
+    - [confirm recovery with metrics, confirm, metrics, error rate, dashboard]
+    - [find the cause after recovery, root cause, investigate, logs, diff]
+    - [improve the pipeline to catch it next time, test, canary, pipeline, prevent]
+  ideal: >-
+    The change is the most likely cause, so I roll back first rather than debug in production, and tell the team
+    in the incident channel. I confirm on the dashboards that the error rate returns to normal. Then, calmly, I
+    compare the diff and the logs to find the cause, fix it with a test that would have caught it, and consider
+    adding a canary step or automatic rollback on error rate so the pipeline stops a bad release by itself next
+    time.
+  mistakes:
+    - Trying a hot-fix forward under pressure instead of rolling back.
+  follow_up: When is rolling forward better than rolling back?
+  spoken: >-
+    I roll back first, tell the team, and check the error rate goes back to normal. Then I find the cause, add a
+    test, and improve the pipeline so it catches this next time.
+
+- id: scn-db-connections
+  section: scenario
+  skills: [postgresql]
+  difficulty: medium
+  q: Your application logs show "too many connections" from PostgreSQL. What is happening and how do you fix it?
+  tests: Database operations knowledge.
+  points:
+    - [max_connections limit reached, max_connections, limit]
+    - [each pod or instance has its own pool, pool, per pod, replicas, scale]
+    - [use a connection pooler like PgBouncer, pgbouncer, pooler, rds proxy]
+    - [find leaks or idle connections, leak, idle, pg_stat_activity]
+    - [do not just raise the limit, memory, raise, increase]
+  ideal: >-
+    PostgreSQL has hit max_connections. Often the app scaled out: each pod has its own connection pool, so 20 pods
+    times a pool of 20 is 400 connections. I check pg_stat_activity for who holds connections and whether many are
+    idle or leaked (not returned to the pool). Fixes: size the application pools for the number of replicas, fix
+    leaks, and put a pooler such as PgBouncer (or RDS Proxy) in front, which multiplexes many client connections
+    onto a few server connections. Simply raising max_connections costs memory per connection and only delays the
+    problem.
+  mistakes:
+    - Only raising max_connections.
+  follow_up: What is the difference between session and transaction pooling in PgBouncer?
+  spoken: >-
+    The database reached its connection limit, usually because many pods each open their own pool. I check
+    pg_stat_activity, fix leaks, size the pools, and add PgBouncer instead of just raising the limit.
+
+- id: scn-kafka-lag
+  section: scenario
+  skills: [kafka]
+  difficulty: medium
+  q: Consumer lag on a Kafka topic keeps growing. What could cause it and what would you do?
+  tests: Streaming systems operations.
+  points:
+    - [consumers slower than producers, slow, throughput, producer]
+    - [partitions limit parallelism, partition, parallel]
+    - [scale consumers up to the partition count, scale, add consumer, consumer group]
+    - [slow processing or downstream dependency, processing, downstream, database, batch]
+    - [rebalances or errors causing retries, rebalanc, retry, error, poison]
+  ideal: >-
+    Lag grows when consumers process slower than producers write. I check whether traffic increased, whether
+    consumers are erroring and retrying (for example a poison message), whether frequent rebalances stop them, or
+    whether each message waits on a slow downstream like a database. Scaling out helps only up to the number of
+    partitions, because each partition is read by one consumer in the group, so I may need more partitions. Other
+    fixes are batching writes downstream, making processing asynchronous, and sending bad messages to a dead-letter
+    topic. I alert on lag in time or messages, not only on errors.
+  mistakes:
+    - Adding more consumers than partitions and expecting more throughput.
+  follow_up: How do you keep message order while scaling consumers?
+  spoken: >-
+    Lag grows when consumers are slower than producers. I check for errors, slow downstream systems and rebalances.
+    I can add consumers, but only up to the number of partitions, and I send bad messages to a dead-letter topic.
