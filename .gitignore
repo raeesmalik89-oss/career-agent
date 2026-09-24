@@ -26,3 +26,7 @@ storage/
 
 # Prometheus bearer token for /metrics (same value as METRICS_TOKEN)
 infra/observability/metrics_token
+
+# Server backups (deploy/docker-compose.prod.yml) and Grafana admin password
+backups/
+infra/observability/grafana_admin_password

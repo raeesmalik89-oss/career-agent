@@ -1,6 +1,21 @@
-# API + scheduler + PostgreSQL, plus an optional observability profile (Prometheus + Grafana).
-# The frontend image comes in Milestone 12.
+# Career Agent: PostgreSQL + API + scheduler + dashboard, all bound to 127.0.0.1.
+#   docker compose up -d --build                        -> http://localhost:3000
+#   docker compose --profile observability up -d       -> + Prometheus :9090, Grafana :3001
+# For a server with HTTPS add the production override:  see docs/DEPLOYMENT.md
 name: career-agent
+
+x-app: &app
+  build: .
+  image: career-agent-api:${APP_VERSION:-latest}
+  env_file: .env
+  environment:
+    DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-career}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-career_agent}
+  read_only: true
+  tmpfs: [/tmp]
+  security_opt: ["no-new-privileges:true"]
+  cap_drop: [ALL]
+  networks: [backend]
+  restart: unless-stopped
 
 services:
   postgres:
@@ -20,51 +35,45 @@ services:
       timeout: 3s
       retries: 20
     networks: [backend]
-
-  redis:
-    image: redis:7-alpine
-    command: ["redis-server", "--save", "", "--appendonly", "no"]
-    ports:
-      - "127.0.0.1:6379:6379"
-    networks: [backend]
+    restart: unless-stopped
 
   api:
-    build: .
-    env_file: .env
-    environment:
-      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-career}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-career_agent}
-      REDIS_URL: redis://redis:6379/0
+    <<: *app
     depends_on:
       postgres:
         condition: service_healthy
-      redis:
-        condition: service_started
     ports:
       - "127.0.0.1:8000:8000"
-    read_only: true
-    tmpfs: [/tmp]
-    security_opt: ["no-new-privileges:true"]
-    networks: [backend]
 
   scheduler:
-    # Same image as the API; runs the daily pipelines. Waits for the API, which applies the migrations.
-    build: .
+    # Same image as the API; runs the daily pipelines. Starts after the API, which applies the migrations.
+    <<: *app
     command: ["python", "-m", "scheduler"]
-    env_file: .env
-    environment:
-      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-career}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-career_agent}
     depends_on:
       api:
         condition: service_healthy
     healthcheck:
       disable: true
+
+  web:
+    build:
+      context: ./frontend
+      args:
+        BACKEND_URL: http://api:8000
+    image: career-agent-web:${APP_VERSION:-latest}
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:3000:3000"
     read_only: true
     tmpfs: [/tmp]
     security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
     networks: [backend]
     restart: unless-stopped
 
-  # Optional: docker compose --profile observability up -d   (Prometheus on :9090, Grafana on :3001)
+  # ---- optional: docker compose --profile observability up -d ----------------------------------------------------
   prometheus:
     image: prom/prometheus:v3.5.0
     profiles: [observability]
@@ -77,15 +86,18 @@ services:
       - "127.0.0.1:9090:9090"
     depends_on: [api]
     networks: [backend]
+    restart: unless-stopped
 
   grafana:
     image: grafana/grafana:12.1.0
     profiles: [observability]
     environment:
-      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?set GRAFANA_ADMIN_PASSWORD in .env}
+      # admin password from a git-ignored file (see docs/DEPLOYMENT.md); never a default
+      GF_SECURITY_ADMIN_PASSWORD__FILE: /run/secrets/grafana_admin_password
       GF_USERS_ALLOW_SIGN_UP: "false"
       GF_ANALYTICS_REPORTING_ENABLED: "false"
     volumes:
+      - ./infra/observability/grafana_admin_password:/run/secrets/grafana_admin_password:ro
       - ./infra/observability/grafana/provisioning:/etc/grafana/provisioning:ro
       - ./infra/observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
       - grafanadata:/var/lib/grafana
@@ -93,6 +105,7 @@ services:
       - "127.0.0.1:3001:3000"
     depends_on: [prometheus]
     networks: [backend]
+    restart: unless-stopped
 
 volumes:
   pgdata:

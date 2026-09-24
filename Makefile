@@ -1,4 +1,4 @@
-.PHONY: install keys test test-pg lint fmt migrate revision seed owner run up down logs
+.PHONY: install keys test test-pg e2e cov lint fmt migrate revision seed owner run up down logs prod-up smoke backup
 
 export PYTHONPATH := backend:.
 
@@ -42,4 +42,19 @@ down:
 	docker compose down
 
 logs:
-	docker compose logs -f api
+	docker compose logs -f api scheduler web
+
+e2e:                ## end-to-end journey test only
+	uv run pytest tests/e2e
+
+cov:                ## all tests with coverage (fails under the floor in pyproject.toml)
+	uv run pytest --cov --cov-report=term
+
+prod-up:            ## production on a server (needs DOMAIN and ACME_EMAIL in .env)
+	docker compose -f docker-compose.yml -f deploy/docker-compose.prod.yml up -d --build
+
+smoke:              ## make smoke url=https://your-domain
+	uv run python scripts/smoke.py "$(url)"
+
+backup:             ## back up the local SQLite database now
+	uv run python -m app.cli backup

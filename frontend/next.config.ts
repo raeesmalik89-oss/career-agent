@@ -19,6 +19,8 @@ const csp = [
 
 const config: NextConfig = {
   poweredByHeader: false,
+  // Self-contained server for the Docker image (frontend/Dockerfile); `npm run dev` is unaffected.
+  output: "standalone",
   async rewrites() {
     return [{ source: "/api/:path*", destination: `${BACKEND_URL}/api/:path*` }];
   },

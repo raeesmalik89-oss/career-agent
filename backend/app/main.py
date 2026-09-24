@@ -56,7 +56,7 @@ def create_app() -> FastAPI:
     max_body = s.max_request_mb * 1024 * 1024
     app = FastAPI(
         title="Career Agent API",
-        version="0.1.0",
+        version="1.0.0",
         docs_url="/docs" if s.app_env != "production" else None,
         redoc_url=None,
     )

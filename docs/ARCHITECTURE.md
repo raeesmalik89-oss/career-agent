@@ -1,7 +1,16 @@
 # Career Agent — Architecture (Phase 0, for approval)
 
-Status: **DRAFT — awaiting owner approval before implementation**
+Status: **Approved 2026-09-23 · implemented as v1.0.0 (2026-09-24)**
 Owner: Raees Malik · GitHub: `raeesmalik89-oss` · Date: 2026-09-23
+
+> **As built in v1.0 (differences from this design):**
+> - **Scheduling and rate limits**: there is no Redis and no Celery. A small scheduler process (`scheduler/`) with exactly-once slots in `pipeline_runs` does the scheduling, and rate limits live in process memory (one API process).
+> - **No LLM calls**: every agent (matching, application writing, interview scoring, concept maps) is deterministic and cites stored facts, so there is no token budget to enforce yet. The LLM hooks described below are future work.
+> - **No automated form submission**: every application is *assisted*. The agent prepares and validates it; you approve it and submit it yourself on the employer's site.
+> - **Notifications**: the dashboard polls instead of using SSE. Email (SMTP) and Telegram are optional; Slack is not implemented.
+> - **Pipelines** are defined in Python (`scheduler/pipelines.py`), not YAML.
+>
+> See README "What Milestone N contains" and [DEPLOYMENT.md](DEPLOYMENT.md) for the system as it runs.
 
 ---
 

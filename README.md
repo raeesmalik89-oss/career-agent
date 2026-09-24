@@ -21,7 +21,7 @@ The design is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 | 9 | Skill Gap + Concept Maps | ✅ done |
 | 10 | Scheduler + Notifications | ✅ done |
 | 11 | Observability + Security hardening | ✅ done |
-| 12 | Testing + Deployment | next |
+| 12 | Testing + Deployment | ✅ done (v1.0.0) |
 
 ### What Milestone 1 contains
 - **FastAPI backend** (`backend/app`): health/readiness, Prometheus `/metrics`, request IDs, security headers.
@@ -152,6 +152,16 @@ The design is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
   Tests now run in a sandbox and can never touch `storage/`. See [SECURITY.md](SECURITY.md).
 
+### What Milestone 12 contains
+- **End-to-end journey test** (`tests/e2e/test_journey.py`). One user goes through the whole product over HTTP:
+  CV → fact review → scan → explained match → application (written, approved, marked applied by you) → interview practice → skill gaps and plan → evening pipeline → report and notification → health, metrics and audit trail → sign out.
+- **Coverage** is 87%, with an 85% floor in CI (`make cov`). CI also validates both compose files and builds and Trivy-scans both images.
+- **Dashboard image** (`frontend/Dockerfile`, Next.js standalone, non-root) and a compose stack of PostgreSQL, API, scheduler and web. Everything is read-only, runs with `cap_drop: ALL` and is bound to 127.0.0.1. Redis is removed, because it was unused.
+- **Production on a server** (`deploy/`): Caddy with automatic HTTPS as the only public service, strict API settings, and daily verified `pg_dump` backups.
+- **`.dockerignore`** keeps `storage/`, `.env` and keys out of every image build.
+- **`scripts/smoke.py`**: a read-only post-deploy check (9 checks locally, 11 over HTTPS).
+- **Guides**: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) (Windows, Docker and a server; upgrades, rollback, restore; every setting) and [CHANGELOG.md](CHANGELOG.md).
+
 ## API (so far)
 
 | Method | Path | Role |
@@ -248,22 +258,23 @@ npm test             # unit tests;  npx tsc --noEmit  type check;  npx next buil
 ```bash
 cp .env.example .env
 make keys            # paste the two values into .env
-docker compose up -d --build
+docker compose up -d --build     # postgres, api, scheduler, web
 docker compose exec api python -m app.cli create-owner --email you@example.com --name "Your Name"
-# API: http://localhost:8000/docs
+# Dashboard: http://localhost:3000   API docs: http://localhost:8000/docs
+make smoke url=http://localhost:3000
 make test-pg         # runs the suite against PostgreSQL too
 ```
 
 ### Local dev server against Docker Postgres
 ```bash
-docker compose up -d postgres redis
+docker compose up -d postgres
 make migrate seed
 make owner email=you@example.com name="Your Name"
 make run             # http://localhost:8000/docs
 ```
 
-## Production (outline; finished in Milestone 12)
-One VM (Terraform), `docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d`, Caddy for TLS, `COOKIE_SECURE=true`, nightly `pg_dump` to object storage. Secrets live in `.env` on the host, never in Git.
+## Production
+A Linux server with a domain name: `make prod-up`, which is `docker compose -f docker-compose.yml -f deploy/docker-compose.prod.yml up -d --build`. Caddy provides automatic HTTPS, the API runs with production checks, and `pg_dump` backups run daily. Then run `make smoke url=https://your-domain`. Step by step, including upgrades and rollback: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
 ## Backups and restore (SQLite)
 - Backups are made automatically once a day by housekeeping, or with **Automation → Back up now**, or with `uv run python -m app.cli backup` (`--list` to see them). They go to `storage/backups/career-agent-YYYYMMDD-HHMMSS.db`.

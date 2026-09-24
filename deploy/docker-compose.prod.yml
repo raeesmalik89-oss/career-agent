@@ -1,0 +1,66 @@
+# Production override for one Linux server with a domain name (see docs/DEPLOYMENT.md):
+#   docker compose -f docker-compose.yml -f deploy/docker-compose.prod.yml up -d --build
+# Only Caddy is reachable from outside (80/443, automatic Let's Encrypt HTTPS). Everything else stays on the
+# private Docker network; /metrics and the database are never exposed.
+services:
+  postgres:
+    ports: !reset []
+
+  api:
+    ports: !reset []
+    environment:
+      APP_ENV: production
+      COOKIE_SECURE: "true"
+      CORS_ORIGINS: '["https://${DOMAIN:?set DOMAIN in .env}"]'
+      # the dashboard container is the only client; trust its X-Forwarded-For so rate limits see real IPs
+      FORWARDED_ALLOW_IPS: "*"
+      LOG_FORMAT: json
+
+  scheduler:
+    environment:
+      APP_ENV: production
+      COOKIE_SECURE: "true"
+      LOG_FORMAT: json
+
+  web:
+    ports: !reset []
+
+  caddy:
+    image: caddy:2.10-alpine
+    environment:
+      DOMAIN: ${DOMAIN:?set DOMAIN in .env}
+      ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL in .env}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    depends_on: [web]
+    networks: [backend]
+    restart: unless-stopped
+
+  pgbackup:
+    # daily pg_dump (custom format), 14 kept, into ./backups on the host (git-ignored)
+    image: pgvector/pgvector:pg16
+    environment:
+      PGHOST: postgres
+      PGUSER: ${POSTGRES_USER:-career}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGDATABASE: ${POSTGRES_DB:-career_agent}
+      KEEP_DAYS: "14"
+    entrypoint: ["/bin/sh", "/deploy/pgbackup.sh"]
+    volumes:
+      - ./deploy/pgbackup.sh:/deploy/pgbackup.sh:ro
+      - ./backups:/backups
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [backend]
+    restart: unless-stopped
+
+volumes:
+  caddy_data:
+  caddy_config:

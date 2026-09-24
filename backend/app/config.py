@@ -11,7 +11,6 @@ class Settings(BaseSettings):
 
     app_env: str = Field("development", pattern="^(development|test|production)$")
     database_url: str = "postgresql+psycopg://career:career@localhost:5432/career_agent"
-    redis_url: str = "redis://localhost:6379/0"
 
     # 32+ random bytes, base64/hex/any string; used to sign JWTs.
     jwt_secret: str = Field(..., min_length=32)
