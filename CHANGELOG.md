@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.0.1 (2026-09-24)
+
+First release with every CI check green on GitHub (lint, gitleaks, pip-audit, SQLite and PostgreSQL tests,
+frontend, compose validation, image builds + Trivy).
+
+- **Fix:** the daily interview pack keeps its planned order. On PostgreSQL it could come back shuffled after a reload, because the order came from the database. Migration `0006` adds `interview_questions.position`.
+- **Dashboard image:** npm, npx, corepack and yarn are removed from the runtime stage. They were unused, and they carried 4 HIGH CVEs from the base image.
+- **API image:** uses uv 0.11, which can read the current `uv.lock`.
+- **CI:** Trivy action `v0.36.0`; `.gitleaks.toml` allows the deliberately fake keys in `tests/`.
+
 ## 1.0.0 (2026-09-24)
 
 First complete release: all 12 milestones of [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
