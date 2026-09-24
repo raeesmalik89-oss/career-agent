@@ -13,7 +13,7 @@ from agents.notification_agent.service import send_test
 from app.db.enums import Actor
 from app.db.models import DailyReport, Notification, PipelineRun, SchedulerState, User
 from app.db.session import get_db, get_sessionmaker
-from app.deps import RequestCtx, any_user, owner_only, request_ctx
+from app.deps import RequestCtx, any_user, owner_only, rate_limit, request_ctx
 from app.services import audit, settings_service
 from app.services.secrets import has_secret
 from scheduler.cron import parse
@@ -108,7 +108,9 @@ def _execute_in_background(run_id: uuid.UUID) -> None:
             db.commit()
 
 
-@router.post("/pipelines/{name}/run", status_code=status.HTTP_202_ACCEPTED)
+@router.post(
+    "/pipelines/{name}/run", status_code=status.HTTP_202_ACCEPTED, dependencies=[Depends(rate_limit("pipeline_run", 6))]
+)
 def run_pipeline(
     name: str,
     background: BackgroundTasks,
@@ -223,7 +225,7 @@ def channels(user: User = Depends(owner_only), db: Session = Depends(get_db)) ->
     }
 
 
-@router.post("/notifications/test")
+@router.post("/notifications/test", dependencies=[Depends(rate_limit("notification_test", 3))])
 def test_notification(
     user: User = Depends(owner_only), db: Session = Depends(get_db), ctx: RequestCtx = Depends(request_ctx)
 ) -> dict:
@@ -239,6 +241,32 @@ def test_notification(
     )
     db.commit()
     return {k: {"status": v.get("status"), "error": v.get("error")} for k, v in result.items()}
+
+
+# ---- system health and backups -----------------------------------------------------------------------------------
+
+
+@router.get("/system/health")
+def system_health(user: User = Depends(owner_only), db: Session = Depends(get_db)) -> dict:
+    from app.services.health import snapshot
+
+    return snapshot(db, user.id)
+
+
+@router.post("/system/backup", dependencies=[Depends(rate_limit("backup", 3))])
+def backup_now(
+    user: User = Depends(owner_only), db: Session = Depends(get_db), ctx: RequestCtx = Depends(request_ctx)
+) -> dict:
+    from app.services import backup
+
+    try:
+        b = backup.create_backup()
+    except backup.BackupError as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from None
+    audit.record(db, action="system.backup", actor=Actor.user, user_id=user.id, after={"file": b.path.name},
+                 request_id=ctx.request_id)  # fmt: skip
+    db.commit()
+    return {"file": b.path.name, "size_bytes": b.size, "created_at": b.created_at}
 
 
 # ---- daily reports -----------------------------------------------------------------------------------------------
@@ -280,7 +308,7 @@ def daily_report(day: date, user: User = Depends(any_user), db: Session = Depend
     }
 
 
-@router.post("/reports/daily")
+@router.post("/reports/daily", dependencies=[Depends(rate_limit("report_build", 6))])
 def build_report_now(user: User = Depends(owner_only), db: Session = Depends(get_db)) -> dict:
     """Build (or rebuild) today's report without waiting for evening prep. Sends no notification."""
     from agents.report_agent.daily import save

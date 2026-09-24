@@ -4,6 +4,8 @@ rem then opens the browser. Close the three windows it opens to stop it.
 cd /d "%~dp0"
 set PYTHONPATH=backend;.
 set API_PORT=8010
+rem Readable logs in the windows (the default, JSON lines, is for log collectors). Secrets are always redacted.
+set LOG_FORMAT=text
 
 if not exist ".venv\Scripts\python.exe" (
   echo Python environment not found. Run "uv sync" in this folder first.

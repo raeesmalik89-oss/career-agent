@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { AccountSecurity } from "@/components/account-security";
 import { useIsOwner } from "@/components/shell";
 import { Button, Card, CardHeader, ErrorNote, Loading, PageHeader, cx } from "@/components/ui";
 import { ApiError, api } from "@/lib/api";
@@ -317,6 +318,7 @@ export default function SettingsPage() {
         <NotificationSettings s={s} ntf={ntf} num={num} dirty={dirty} owner={owner} />
       </fieldset>
       {!owner && <p className="mt-4 text-sm text-muted">Viewers can read settings but not change them.</p>}
+      <AccountSecurity />
     </>
   );
 }

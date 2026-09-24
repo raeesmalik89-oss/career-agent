@@ -29,6 +29,13 @@ class Settings(BaseSettings):
     timezone: str = "Asia/Karachi"
     # Uploaded resumes/certificates and generated files. Never commit this directory.
     storage_dir: str = "storage"
+    # Daily SQLite backups (housekeeping). PostgreSQL deployments back up with pg_dump instead.
+    backup_keep: int = Field(14, ge=1, le=365)
+    # Requests larger than this are refused before they reach an endpoint (resume uploads are the biggest).
+    max_request_mb: int = Field(25, ge=1, le=200)
+    # If set, GET /metrics requires "Authorization: Bearer <token>" (always set it when the API is reachable
+    # from other machines). Unset: /metrics is only served to loopback clients.
+    metrics_token: str | None = Field(None, min_length=16)
 
     @field_validator("cookie_secure")
     @classmethod

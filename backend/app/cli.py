@@ -24,7 +24,7 @@ from app.schemas.settings import UserSettings
 from app.services import audit, settings_service
 from app.services.seed import seed_sources
 
-MIN_PASSWORD = 12
+MIN_PASSWORD = 12  # same as app.api.v1.auth.MIN_PASSWORD (not imported: gen-keys must work before .env exists)
 
 
 def gen_keys() -> None:
@@ -332,6 +332,19 @@ def run_pipeline(email: str, name: str) -> None:
         print(f"{name}: {run.status}")
 
 
+def backup_cmd(list_only: bool) -> None:
+    from app.services import backup
+
+    if not list_only:
+        try:
+            b = backup.create_backup()
+        except backup.BackupError as exc:
+            sys.exit(str(exc))
+        print(f"backup written: {b.path} ({b.size / 1024**2:.1f} MB, integrity ok)")
+    for b in backup.list_backups():
+        print(f"  {b.created_at:%Y-%m-%d %H:%M} UTC  {b.size / 1024**2:6.1f} MB  {b.path}")
+
+
 def create_owner(email: str, name: str, password: str | None) -> None:
     password = password or getpass.getpass("Owner password (min 12 chars): ")
     if len(password) < MIN_PASSWORD:
@@ -400,6 +413,8 @@ def main(argv: list[str] | None = None) -> None:
     rp = sub.add_parser("report")
     rp.add_argument("--email", required=True)
     rp.add_argument("--out")
+    bk = sub.add_parser("backup", help="back up the SQLite database now (storage/backups/)")
+    bk.add_argument("--list", action="store_true", help="only list existing backups")
     rpl = sub.add_parser("run-pipeline", help="run a scheduled pipeline now (morning_scan, evening_prep, ...)")
     rpl.add_argument("--email", required=True)
     rpl.add_argument("name")
@@ -419,6 +434,8 @@ def main(argv: list[str] | None = None) -> None:
         sources_cmd(args.enable, args.disable, companies)
     elif args.cmd == "scan-jobs":
         scan_jobs(args.email, args.source)
+    elif args.cmd == "backup":
+        backup_cmd(args.list)
     elif args.cmd == "run-pipeline":
         run_pipeline(args.email, args.name)
     elif args.cmd == "reanalyze-jobs":

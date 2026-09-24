@@ -20,8 +20,8 @@ The design is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 | 8 | Interview Coach | ✅ done |
 | 9 | Skill Gap + Concept Maps | ✅ done |
 | 10 | Scheduler + Notifications | ✅ done |
-| 11 | Observability + Security hardening | next |
-| 12 | Testing + Deployment | |
+| 11 | Observability + Security hardening | ✅ done |
+| 12 | Testing + Deployment | next |
 
 ### What Milestone 1 contains
 - **FastAPI backend** (`backend/app`): health/readiness, Prometheus `/metrics`, request IDs, security headers.
@@ -125,6 +125,33 @@ The design is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 - **Dashboard**: an **Automation** page (scheduler status, next and last run, run now, step details), **Notifications** (bell with unread count), **Daily reports**, and new Settings cards for Automation and Notifications (with Send test).
 - SQLite now uses WAL and a busy timeout, because the API and the scheduler share the file. Migration `0005` adds `pipeline_runs`, `scheduler_state`, notification dedup keys and notification settings.
 
+### What Milestone 11 contains
+- **Structured logs** (`backend/app/core/logging.py`): JSON lines with the request ID (`LOG_FORMAT=text` for a terminal; the Windows launcher uses it). Access logs record the route template and duration, never the raw URL.
+- **Redaction everywhere** (`backend/app/core/redact.py`): log lines, tracebacks, stored agent errors and pipeline errors are scrubbed. This covers bearer tokens, JWTs, GitHub, Telegram and API keys, `password=` pairs, URL credentials and Jooble keys.
+- **System health** (`GET /api/v1/system/health`, shown at the top of the Automation page). It checks:
+  - database latency, and whether migrations are pending;
+  - the scheduler heartbeat and the last run of each pipeline;
+  - time since the last job fetch, and failed deliveries;
+  - Jooble quota, backup age and free disk;
+  - configuration.
+- **Prometheus `/metrics`**:
+  - HTTP traffic and latency;
+  - auth events (logins, failures, token reuse) and rate-limit refusals;
+  - health gauges computed from the database, so they also cover the scheduler process.
+
+  Needs `METRICS_TOKEN` when scraped from another host.
+- **Prometheus + Grafana** (`infra/observability/`, `docker compose --profile observability up -d`): 11 alert rules (scheduler down, pipeline failing, stale scan or backup, failing deliveries, low quota, 5xx rate, login-failure spike, refresh-token reuse) and a provisioned dashboard.
+- **Daily verified backups** of the SQLite database (housekeeping; `storage/backups/`, 14 kept). Also available with **Back up now** and `app.cli backup`.
+- **Account security** (Settings): change password (signs out other devices), list and sign out devices, and turn 2FA on or off in the dashboard.
+- **Hardening**:
+  - stricter response headers (CSP, COOP/CORP, Permissions-Policy, HSTS with secure cookies);
+  - a 25 MB request limit, and safe request IDs;
+  - per-user rate limits on expensive or sensitive actions;
+  - startup configuration checks (production refuses weak settings);
+  - `pip-audit` in CI.
+
+  Tests now run in a sandbox and can never touch `storage/`. See [SECURITY.md](SECURITY.md).
+
 ## API (so far)
 
 | Method | Path | Role |
@@ -159,6 +186,9 @@ The design is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 | GET | `/api/v1/notifications` (unread, before, limit) · `/notifications/unread-count` | any |
 | POST | `/api/v1/notifications/{id}/read` · `/notifications/read-all` · `/notifications/test` · GET `/notifications/channels` | owner |
 | GET | `/api/v1/reports/daily` · `/api/v1/reports/daily/{date}` · POST `/api/v1/reports/daily` (build now) | any / owner |
+| GET | `/api/v1/system/health` · POST `/api/v1/system/backup` | owner |
+| POST | `/api/v1/auth/password` · GET `/auth/sessions` · POST `/auth/sessions/{id}/revoke` · `/auth/sessions/revoke-others` | any |
+| POST | `/api/v1/auth/totp/disable` | owner |
 | GET | `/api/v1/audit-logs` · `/api/v1/agent-runs` | owner |
 | GET | `/healthz` · `/readyz` · `/metrics` · `/docs` (dev only) | – |
 
@@ -235,7 +265,23 @@ make run             # http://localhost:8000/docs
 ## Production (outline; finished in Milestone 12)
 One VM (Terraform), `docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d`, Caddy for TLS, `COOKIE_SECURE=true`, nightly `pg_dump` to object storage. Secrets live in `.env` on the host, never in Git.
 
+## Backups and restore (SQLite)
+- Backups are made automatically once a day by housekeeping, or with **Automation → Back up now**, or with `uv run python -m app.cli backup` (`--list` to see them). They go to `storage/backups/career-agent-YYYYMMDD-HHMMSS.db`.
+- To restore:
+  1. Close the three Career Agent windows.
+  2. Copy `storage/dev.db` somewhere safe.
+  3. Copy the backup you want over `storage/dev.db`.
+  4. Run `start-career-agent.cmd` again (it applies any newer migrations).
+- PostgreSQL: `docker compose exec postgres pg_dump -U career career_agent > backup.sql`.
+
+## Observability (optional, Docker)
+```bash
+python3 -c "import secrets; print(secrets.token_urlsafe(32))" > infra/observability/metrics_token   # also put it in .env as METRICS_TOKEN
+docker compose --profile observability up -d     # Prometheus http://localhost:9090 · Grafana http://localhost:3001 (admin / GRAFANA_ADMIN_PASSWORD)
+```
+
 ## Security notes
+See [SECURITY.md](SECURITY.md) for the full list.
 - `.env`, `*.pem`, `*.key` and `storage/` are git-ignored, and CI runs gitleaks.
 - Job-platform passwords are never stored. Third-party tokens are stored encrypted in `secrets`.
 - `TEST_DATABASE_URL` must name a database containing `test`, because the suite wipes it.

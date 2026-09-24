@@ -1,3 +1,4 @@
+import uuid
 from datetime import UTC, datetime, timedelta
 
 import pyotp
@@ -8,12 +9,19 @@ from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.core import crypto
+from app.core.metrics import AUTH_EVENTS
 from app.core.ratelimit import RateLimiter
-from app.core.security import create_access_token, new_refresh_token, sha256_hex, verify_password
+from app.core.security import (
+    create_access_token,
+    hash_password,
+    new_refresh_token,
+    sha256_hex,
+    verify_password,
+)
 from app.db.enums import Actor
 from app.db.models import AuthSession, User
 from app.db.session import get_db
-from app.deps import ACCESS_COOKIE, REFRESH_COOKIE, RequestCtx, current_user, owner_only, request_ctx
+from app.deps import ACCESS_COOKIE, REFRESH_COOKIE, RequestCtx, current_user, owner_only, rate_limit, request_ctx
 from app.services import audit
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -89,6 +97,7 @@ def login(body: LoginIn, response: Response, db: Session = Depends(get_db), ctx:
 
     ok = verify_password(body.password, user.password_hash if user else None)
     if not ok or user is None or not user.is_active:
+        AUTH_EVENTS.labels("login_failed").inc()
         if user:
             user.failed_logins += 1
             if user.failed_logins >= MAX_FAILED_LOGINS:
@@ -123,6 +132,7 @@ def login(body: LoginIn, response: Response, db: Session = Depends(get_db), ctx:
 
     user.failed_logins = 0
     user.locked_until = None
+    AUTH_EVENTS.labels("login").inc()
     out = _issue(db, response, user, ctx)
     audit.record(
         db, action="auth.login", actor=Actor.user, user_id=user.id, request_id=ctx.request_id, ip_hash=ctx.ip_hash
@@ -159,6 +169,7 @@ def refresh(
             ip_hash=ctx.ip_hash,
         )
         db.commit()
+        AUTH_EVENTS.labels("refresh_reuse_detected").inc()
         raise unauthorized
     if _as_utc(session.expires_at) <= now:
         raise unauthorized
@@ -227,4 +238,141 @@ def totp_verify(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "invalid code")
     user.totp_enabled = True
     audit.record(db, action="auth.totp_enabled", actor=Actor.user, user_id=user.id, request_id=ctx.request_id)
+    db.commit()
+
+
+# ---- account security: password, sessions, 2FA -----------------------------------------------------------------
+
+MIN_PASSWORD = 12
+
+
+class PasswordIn(BaseModel):
+    current_password: str = Field(min_length=1, max_length=256)
+    new_password: str = Field(min_length=MIN_PASSWORD, max_length=256)
+
+
+class TotpDisableIn(BaseModel):
+    password: str = Field(min_length=1, max_length=256)
+    code: str = Field(pattern=r"^\d{6}$")
+
+
+class SessionOut(BaseModel):
+    id: str
+    current: bool
+    user_agent: str | None
+    last_active: datetime
+    expires_at: datetime
+
+
+def _check_new_password(user: User, new: str, current: str) -> None:
+    if new == current:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "the new password must differ from the current one")
+    if len(set(new)) < 6:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "the new password is too repetitive")
+    local = user.email.split("@")[0].lower()
+    if len(local) >= 4 and local in new.lower():
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "the new password must not contain your email name")
+
+
+def _revoke_others(db: Session, user: User, keep: uuid.UUID | None) -> int:
+    q = update(AuthSession).where(AuthSession.user_id == user.id, AuthSession.revoked_at.is_(None))
+    if keep is not None:
+        q = q.where(AuthSession.id != keep)
+    return db.execute(q.values(revoked_at=datetime.now(UTC))).rowcount
+
+
+@router.post("/password", dependencies=[Depends(rate_limit("password_change", 5))])
+def change_password(
+    body: PasswordIn,
+    request: Request,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+    ctx: RequestCtx = Depends(request_ctx),
+) -> dict:
+    """Needs the current password. Signs out every other device."""
+    if not verify_password(body.current_password, user.password_hash):
+        audit.record(db, action="auth.password_change_failed", actor=Actor.user, user_id=user.id,
+                     request_id=ctx.request_id, ip_hash=ctx.ip_hash)  # fmt: skip
+        db.commit()
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "current password is wrong")
+    _check_new_password(user, body.new_password, body.current_password)
+    user.password_hash = hash_password(body.new_password)
+    revoked = _revoke_others(db, user, request.state.session_id)
+    audit.record(db, action="auth.password_changed", actor=Actor.user, user_id=user.id, request_id=ctx.request_id,
+                 after={"other_sessions_revoked": revoked}, ip_hash=ctx.ip_hash)  # fmt: skip
+    db.commit()
+    AUTH_EVENTS.labels("password_changed").inc()
+    return {"other_sessions_revoked": revoked}
+
+
+@router.get("/sessions", response_model=list[SessionOut])
+def sessions(request: Request, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    now = datetime.now(UTC)
+    rows = db.scalars(
+        select(AuthSession)
+        .where(AuthSession.user_id == user.id, AuthSession.revoked_at.is_(None))
+        .order_by(AuthSession.created_at.desc())
+    )
+    return [
+        SessionOut(
+            id=str(r.id),
+            current=r.id == request.state.session_id,
+            user_agent=r.user_agent,
+            last_active=_as_utc(r.created_at),
+            expires_at=_as_utc(r.expires_at),
+        )
+        for r in rows
+        if _as_utc(r.expires_at) > now
+    ]
+
+
+@router.post("/sessions/{session_id}/revoke", status_code=status.HTTP_204_NO_CONTENT)
+def revoke_session(
+    session_id: uuid.UUID,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+    ctx: RequestCtx = Depends(request_ctx),
+):
+    row = db.get(AuthSession, session_id)
+    if row is None or row.user_id != user.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "session not found")
+    if row.revoked_at is None:
+        row.revoked_at = datetime.now(UTC)
+        audit.record(db, action="auth.session_revoked", actor=Actor.user, user_id=user.id,
+                     entity_type="auth_sessions", entity_id=row.id, request_id=ctx.request_id)  # fmt: skip
+        db.commit()
+
+
+@router.post("/sessions/revoke-others")
+def revoke_other_sessions(
+    request: Request,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+    ctx: RequestCtx = Depends(request_ctx),
+) -> dict:
+    revoked = _revoke_others(db, user, request.state.session_id)
+    audit.record(db, action="auth.sessions_revoked", actor=Actor.user, user_id=user.id,
+                 after={"revoked": revoked}, request_id=ctx.request_id)  # fmt: skip
+    db.commit()
+    return {"revoked": revoked}
+
+
+@router.post("/totp/disable", status_code=status.HTTP_204_NO_CONTENT)
+def totp_disable(
+    body: TotpDisableIn,
+    user: User = Depends(owner_only),
+    db: Session = Depends(get_db),
+    ctx: RequestCtx = Depends(request_ctx),
+):
+    """Turning 2FA off needs both the password and a current code."""
+    if not user.totp_enabled or user.totp_secret_enc is None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "two-factor authentication is not enabled")
+    secret = crypto.decrypt(user.totp_secret_enc, _TOTP_AAD + user.id.bytes)
+    if not verify_password(body.password, user.password_hash) or not pyotp.TOTP(secret).verify(
+        body.code, valid_window=1
+    ):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "password or code is wrong")
+    user.totp_enabled = False
+    user.totp_secret_enc = None
+    audit.record(db, action="auth.totp_disabled", actor=Actor.user, user_id=user.id, request_id=ctx.request_id)
     db.commit()

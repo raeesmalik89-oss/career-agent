@@ -11,6 +11,10 @@ os.environ.setdefault("JWT_SECRET", "test-secret-" + "x" * 40)
 os.environ.setdefault("MASTER_KEY", "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=")
 os.environ.setdefault("APP_ENV", "test")
 os.environ.setdefault("COOKIE_SECURE", "false")
+# Never let a test touch the developer's real database or storage/ (the .env file may point at them).
+_SANDBOX = __import__("tempfile").mkdtemp(prefix="career-agent-tests-")
+os.environ["DATABASE_URL"] = f"sqlite:///{_SANDBOX}/unused.db"
+os.environ["STORAGE_DIR"] = os.path.join(_SANDBOX, "storage")
 
 import pytest  # noqa: E402
 from alembic import command  # noqa: E402
@@ -92,9 +96,12 @@ def db(engine):
 @pytest.fixture
 def client(db):
     from app.api.v1.auth import login_limiter
+    from app.deps import LIMITERS
     from app.main import app
 
     login_limiter.reset()
+    for limiter in LIMITERS.values():
+        limiter.reset()
     app.dependency_overrides[get_db] = lambda: db
     with TestClient(app) as c:
         yield c

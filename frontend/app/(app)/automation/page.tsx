@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useIsOwner } from "@/components/shell";
+import { SystemHealthCard } from "@/components/system-health";
 import { Badge, Button, Card, CardHeader, ErrorNote, Loading, PageHeader, cx } from "@/components/ui";
 import { ApiError, api } from "@/lib/api";
 import { RUN_TONE, fmtDateTime, humanize, relTime } from "@/lib/format";
@@ -61,6 +62,7 @@ export default function AutomationPage() {
         }
       />
       <ErrorNote error={err} />
+      {owner && <SystemHealthCard />}
 
       <Card className="mb-6">
         <div className="flex flex-wrap items-center gap-3 px-4 py-3 text-sm">

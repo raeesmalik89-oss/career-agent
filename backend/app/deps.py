@@ -6,6 +6,8 @@ import jwt
 from fastapi import Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
+from app.core.metrics import RATE_LIMITED
+from app.core.ratelimit import RateLimiter
 from app.core.security import decode_access_token, sha256_hex
 from app.db.enums import Role
 from app.db.models import AuthSession, User
@@ -69,3 +71,22 @@ def require_role(*roles: Role) -> Callable[[User], User]:
 
 owner_only = require_role(Role.owner)
 any_user = require_role(Role.owner, Role.viewer)
+
+LIMITERS: dict[str, RateLimiter] = {}
+
+
+def rate_limit(name: str, per_minute: int) -> Callable[..., None]:
+    """Per-user limit for expensive or sensitive actions (scans, syncs, uploads, password changes)."""
+    limiter = LIMITERS.setdefault(name, RateLimiter(per_minute))
+
+    def dep(user: User = Depends(current_user)) -> None:
+        key = str(user.id)
+        if not limiter.hit(key):
+            RATE_LIMITED.labels(name).inc()
+            raise HTTPException(
+                status.HTTP_429_TOO_MANY_REQUESTS,
+                f"too many requests ({name}); try again shortly",
+                headers={"Retry-After": str(limiter.retry_after(key))},
+            )
+
+    return dep

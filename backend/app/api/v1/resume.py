@@ -17,7 +17,7 @@ from agents.taxonomy import get_taxonomy
 from app.db.enums import Actor, Confidence, FactType, ReviewStatus, SourceType
 from app.db.models import ProfileFact, ResumeVersion, User
 from app.db.session import get_db
-from app.deps import RequestCtx, any_user, owner_only, request_ctx
+from app.deps import RequestCtx, any_user, owner_only, rate_limit, request_ctx
 from app.services import audit, storage
 
 router = APIRouter(tags=["resume"])
@@ -92,7 +92,7 @@ def _own_fact(db: Session, user: User, fact_id: uuid.UUID) -> ProfileFact:
     return f
 
 
-@router.post("/resume/upload", response_model=UploadResult)
+@router.post("/resume/upload", response_model=UploadResult, dependencies=[Depends(rate_limit("resume_upload", 5))])
 async def upload(
     files: list[UploadFile] = File(...),
     label: str | None = Form(None, max_length=200),

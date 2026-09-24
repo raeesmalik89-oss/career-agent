@@ -14,7 +14,7 @@ from app.core import crypto
 from app.db.enums import Actor, PkEligibility, RemoteType
 from app.db.models import Job, JobRaw, JobSkill, JobSource, JobSourceLink, Secret, Skill, User
 from app.db.session import get_db
-from app.deps import RequestCtx, any_user, owner_only, request_ctx
+from app.deps import RequestCtx, any_user, owner_only, rate_limit, request_ctx
 from app.services import audit
 from integrations.sources.base import JobPosting
 
@@ -119,7 +119,7 @@ def _job_out(db: Session, job: Job, full: bool = False) -> dict:
     return out
 
 
-@router.post("/jobs/scan")
+@router.post("/jobs/scan", dependencies=[Depends(rate_limit("jobs_scan", 2))])
 def scan(
     body: ScanIn,
     user: User = Depends(owner_only),
@@ -248,7 +248,7 @@ def stats(user: User = Depends(any_user), db: Session = Depends(get_db)) -> dict
     }
 
 
-@router.put("/secrets", status_code=status.HTTP_204_NO_CONTENT)
+@router.put("/secrets", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(rate_limit("secrets", 10))])
 def put_secret(
     body: SecretIn,
     user: User = Depends(owner_only),

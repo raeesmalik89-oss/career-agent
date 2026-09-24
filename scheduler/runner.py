@@ -15,6 +15,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from agents.notification_agent.service import notify
+from app.core.redact import redact
 from app.db.enums import Role
 from app.db.models import PipelineRun, SchedulerState, User
 from app.schemas.settings import UserSettings
@@ -114,7 +115,7 @@ def execute(db: Session, run: PipelineRun, settings: UserSettings, now: datetime
         except Exception as exc:  # noqa: BLE001 - one failing step must not stop the others
             db.rollback()
             log.exception("pipeline %s step %s failed", run.pipeline, name)
-            entry.update(status="failed", error=f"{type(exc).__name__}: {exc}"[:300])
+            entry.update(status="failed", error=redact(f"{type(exc).__name__}: {exc}")[:300])
         entry["seconds"] = round((datetime.now(UTC) - started).total_seconds(), 1)
         results.append(entry)
         run.steps = list(results)

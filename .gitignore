@@ -23,3 +23,6 @@ node_modules/
 # runtime data (resumes, generated applications, screenshots)
 storage/
 *.log
+
+# Prometheus bearer token for /metrics (same value as METRICS_TOKEN)
+infra/observability/metrics_token

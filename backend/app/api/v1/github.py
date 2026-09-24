@@ -10,7 +10,7 @@ from agents.taxonomy import get_taxonomy
 from app.db.enums import Actor
 from app.db.models import GithubProfile, GithubRepository, User
 from app.db.session import get_db
-from app.deps import RequestCtx, any_user, owner_only, request_ctx
+from app.deps import RequestCtx, any_user, owner_only, rate_limit, request_ctx
 from app.services import audit
 
 router = APIRouter(prefix="/github", tags=["github"])
@@ -32,7 +32,7 @@ class SyncOut(BaseModel):
     repositories: int
 
 
-@router.post("/sync", response_model=SyncOut)
+@router.post("/sync", response_model=SyncOut, dependencies=[Depends(rate_limit("github_sync", 2))])
 def sync(
     body: SyncIn,
     user: User = Depends(owner_only),

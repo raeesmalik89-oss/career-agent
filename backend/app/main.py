@@ -1,9 +1,14 @@
+import hmac
+import ipaddress
+import logging
+import re
 import time
 import uuid
 
 from fastapi import Depends, FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
-from prometheus_client import CONTENT_TYPE_LATEST, Counter, Histogram, generate_latest
+from fastapi.responses import JSONResponse
+from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -23,14 +28,32 @@ from app.api.v1 import (
     sources,
 )
 from app.config import get_settings
+from app.core import checks
+from app.core import logging as app_logging
+from app.core.metrics import LATENCY, REQUESTS, health_registry
 from app.db.session import get_db
+from app.services.health import snapshot
 
-REQUESTS = Counter("http_requests_total", "HTTP requests", ["method", "route", "status"])
-LATENCY = Histogram("http_request_duration_seconds", "HTTP latency", ["method", "route"])
+access_log = logging.getLogger("app.access")
+REQUEST_ID_RX = re.compile(r"[A-Za-z0-9._-]{1,64}")
+
+# JSON API responses never need to load anything; /docs (development only) needs its CDN assets.
+API_CSP = "default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"
+
+
+def _loopback(request: Request) -> bool:
+    try:
+        return ipaddress.ip_address(request.client.host).is_loopback if request.client else False
+    except ValueError:
+        return request.client is not None and request.client.host in ("localhost", "testclient")
 
 
 def create_app() -> FastAPI:
     s = get_settings()
+    checks.enforce(s)
+    if s.app_env != "test":
+        app_logging.configure("api")
+    max_body = s.max_request_mb * 1024 * 1024
     app = FastAPI(
         title="Career Agent API",
         version="0.1.0",
@@ -48,18 +71,48 @@ def create_app() -> FastAPI:
     @app.middleware("http")
     async def request_context(request: Request, call_next):
         rid = request.headers.get("x-request-id", "")
-        request.state.request_id = rid if 0 < len(rid) <= 64 and rid.isascii() else uuid.uuid4().hex
+        # a client-supplied id is only accepted if it cannot forge log lines or headers
+        request.state.request_id = rid if REQUEST_ID_RX.fullmatch(rid) else uuid.uuid4().hex
+        token = app_logging.request_id_var.set(request.state.request_id)
         start = time.perf_counter()
-        response: Response = await call_next(request)
+        try:
+            length = int(request.headers.get("content-length") or 0)
+        except ValueError:
+            length = max_body + 1
+        try:
+            if length > max_body:
+                response: Response = JSONResponse(
+                    {"detail": f"request larger than {s.max_request_mb} MB"}, status_code=413
+                )
+            else:
+                response = await call_next(request)
+        finally:
+            app_logging.request_id_var.reset(token)
         route = request.scope.get("route")
         path = getattr(route, "path", "unmatched")
-        LATENCY.labels(request.method, path).observe(time.perf_counter() - start)
+        elapsed = time.perf_counter() - start
+        LATENCY.labels(request.method, path).observe(elapsed)
         REQUESTS.labels(request.method, path, str(response.status_code)).inc()
-        response.headers["X-Request-ID"] = request.state.request_id
-        response.headers["X-Content-Type-Options"] = "nosniff"
-        response.headers["X-Frame-Options"] = "DENY"
-        response.headers["Referrer-Policy"] = "no-referrer"
-        response.headers.setdefault("Cache-Control", "no-store")
+        if path not in ("/healthz", "/metrics"):
+            # the route template, never the raw URL: paths and query strings can carry identifiers or tokens
+            access_log.info(
+                "%s %s %s", request.method, path, response.status_code,
+                extra={"status": response.status_code, "duration_ms": round(elapsed * 1000, 1),
+                       "request_id": request.state.request_id},
+            )  # fmt: skip
+        h = response.headers
+        h["X-Request-ID"] = request.state.request_id
+        h["X-Content-Type-Options"] = "nosniff"
+        h["X-Frame-Options"] = "DENY"
+        h["Referrer-Policy"] = "no-referrer"
+        h["Cross-Origin-Opener-Policy"] = "same-origin"
+        h["Cross-Origin-Resource-Policy"] = "same-origin"
+        h["Permissions-Policy"] = "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
+        if not request.url.path.startswith(("/docs", "/openapi.json")):
+            h.setdefault("Content-Security-Policy", API_CSP)
+        if s.cookie_secure:
+            h["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+        h.setdefault("Cache-Control", "no-store")
         return response
 
     for r in (
@@ -89,8 +142,16 @@ def create_app() -> FastAPI:
         return {"status": "ready"}
 
     @app.get("/metrics", include_in_schema=False)
-    def metrics():
-        return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
+    def metrics(request: Request, db: Session = Depends(get_db)):
+        """Bearer METRICS_TOKEN if configured; otherwise loopback clients only."""
+        if s.metrics_token:
+            given = request.headers.get("authorization", "").removeprefix("Bearer ").strip()
+            if not hmac.compare_digest(given.encode(), s.metrics_token.encode()):
+                return JSONResponse({"detail": "metrics token required"}, status_code=401)
+        elif not _loopback(request):
+            return JSONResponse({"detail": "set METRICS_TOKEN to scrape from another host"}, status_code=403)
+        body = generate_latest() + generate_latest(health_registry(snapshot(db)))
+        return Response(body, media_type=CONTENT_TYPE_LATEST)
 
     return app
 

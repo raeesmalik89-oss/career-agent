@@ -1,0 +1,57 @@
+groups:
+  - name: career-agent
+    rules:
+      - alert: CareerAgentDown
+        expr: up{job="career-agent"} == 0
+        for: 5m
+        annotations:
+          summary: The Career Agent API is not answering /metrics.
+      - alert: SchedulerDown
+        expr: career_scheduler_up == 0
+        for: 10m
+        annotations:
+          summary: No scheduler heartbeat for 10 minutes; scans and reports are not running.
+      - alert: MigrationsPending
+        expr: career_migrations_pending == 1
+        for: 5m
+        annotations:
+          summary: The database schema is behind the code (run alembic upgrade head).
+      - alert: PipelineFailing
+        expr: career_pipeline_last_status == 0
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Last {{ $labels.pipeline }} run failed."
+      - alert: JobScanStale
+        expr: career_jobs_last_fetch_age_seconds > 30 * 3600
+        for: 30m
+        annotations:
+          summary: No job postings fetched for more than 30 hours.
+      - alert: BackupStale
+        expr: career_backup_age_seconds > 36 * 3600 or career_backup_age_seconds == -1
+        for: 1h
+        annotations:
+          summary: No database backup in the last 36 hours.
+      - alert: NotificationsFailing
+        expr: career_notifications_failed_3d > 0
+        for: 1h
+        annotations:
+          summary: Email/Telegram deliveries are failing (check Settings > Notifications > Send test).
+      - alert: JoobleQuotaLow
+        expr: career_jooble_quota_remaining < 40
+        annotations:
+          summary: "Only {{ $value }} Jooble requests left."
+      - alert: HighErrorRate
+        expr: sum(rate(http_requests_total{status=~"5.."}[10m])) / clamp_min(sum(rate(http_requests_total[10m])), 1e-9) > 0.05
+        for: 10m
+        annotations:
+          summary: More than 5% of API requests fail with a server error.
+      - alert: LoginFailuresSpike
+        expr: increase(career_auth_events_total{event="login_failed"}[15m]) > 20
+        annotations:
+          summary: Many failed logins in 15 minutes (possible password guessing).
+      - alert: RefreshTokenReuse
+        expr: increase(career_auth_events_total{event="refresh_reuse_detected"}[1h]) > 0
+        annotations:
+          summary: A rotated refresh token was replayed; all sessions of that user were revoked.

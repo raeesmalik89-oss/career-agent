@@ -9,6 +9,7 @@ from typing import Any, ClassVar, Generic, Literal, TypeVar
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from app.core.redact import redact
 from app.db.enums import Confidence, RunStatus
 from app.db.models import AgentRun
 
@@ -57,7 +58,8 @@ class AgentContext:
         self.actions.append(AgentAction(type=type_, target=target, detail=detail))
 
     def error(self, code: str, message: str, retryable: bool = False) -> None:
-        self.errors.append(AgentError(code=code, message=message, retryable=retryable))
+        # messages are stored in agent_runs and shown in the dashboard: never let a credential through
+        self.errors.append(AgentError(code=code, message=redact(message)[:2000], retryable=retryable))
 
 
 InputT = TypeVar("InputT", bound=BaseModel)

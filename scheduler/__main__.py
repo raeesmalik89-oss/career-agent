@@ -6,6 +6,7 @@ import logging
 import signal
 import threading
 
+from app.core import logging as app_logging
 from app.db.session import get_sessionmaker
 from scheduler.runner import tick
 
@@ -17,7 +18,7 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--once", action="store_true", help="run whatever is due now, then exit")
     p.add_argument("--interval", type=int, default=30, help="seconds between checks (default 30)")
     args = p.parse_args(argv)
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    app_logging.configure("scheduler")
 
     stop = threading.Event()
     for sig in (signal.SIGINT, signal.SIGTERM):

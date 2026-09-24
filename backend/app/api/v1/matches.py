@@ -12,7 +12,7 @@ from app.api.v1.jobs import _job_out
 from app.db.enums import Actor
 from app.db.models import Job, JobMatch, User
 from app.db.session import get_db
-from app.deps import RequestCtx, any_user, owner_only, request_ctx
+from app.deps import RequestCtx, any_user, owner_only, rate_limit, request_ctx
 from app.services import audit, settings_service
 
 router = APIRouter(tags=["matches"])
@@ -126,7 +126,7 @@ def get_match(job_id: uuid.UUID, user: User = Depends(any_user), db: Session = D
     return _match_out(m, job, db, full=True) | {"threshold": settings.preferences.min_fit_score}
 
 
-@router.post("/matches/run")
+@router.post("/matches/run", dependencies=[Depends(rate_limit("match_run", 6))])
 def run(
     user: User = Depends(owner_only), db: Session = Depends(get_db), ctx: RequestCtx = Depends(request_ctx)
 ) -> dict:

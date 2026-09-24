@@ -1,4 +1,7 @@
-"""Fixed-window rate limiter. In-process for Milestone 1; swapped for Redis in Milestone 11."""
+"""Fixed-window rate limiter, kept in process memory.
+
+That is enough for this deployment (one API process). Running several API replicas would need a shared store
+(Redis) so the limits add up across them."""
 
 import threading
 import time
@@ -21,6 +24,11 @@ class RateLimiter:
             count += 1
             self._hits[key] = (start, count)
             return count <= self.limit
+
+    def retry_after(self, key: str) -> int:
+        with self._lock:
+            start, _ = self._hits.get(key, (time.monotonic(), 0))
+        return max(1, int(self.window - (time.monotonic() - start)) + 1)
 
     def reset(self) -> None:
         with self._lock:

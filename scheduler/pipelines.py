@@ -305,6 +305,21 @@ def step_stale_runs(ctx: StepContext) -> dict:
     return {"marked_interrupted": len(stale)}
 
 
+def step_backup(ctx: StepContext) -> dict:
+    """Once a day (the first housekeeping after 20 h), a verified copy of the SQLite database."""
+    from app.services import backup
+
+    path = backup.sqlite_path()
+    if path is None:
+        raise Skip("PostgreSQL: back up with pg_dump")
+    if not path.is_file():
+        raise Skip(f"no database file at {path}")
+    if not backup.due(ctx.now):
+        raise Skip("today's backup already exists")
+    b = backup.create_backup(now=ctx.now)
+    return {"file": b.path.name, "size_mb": round(b.size / 1024**2, 1), "kept": len(backup.list_backups())}
+
+
 Step = tuple[str, Callable[[StepContext], dict]]
 
 SCAN_STEPS: list[Step] = [
@@ -341,8 +356,12 @@ PIPELINES: dict[str, dict] = {
     },
     "housekeeping": {
         "title": "Housekeeping",
-        "about": "Retry failed email/Telegram deliveries and close interrupted runs.",
-        "steps": [("retry_notifications", step_retry_notifications), ("stale_runs", step_stale_runs)],
+        "about": "Retry failed email/Telegram deliveries, close interrupted runs and back up the database daily.",
+        "steps": [
+            ("retry_notifications", step_retry_notifications),
+            ("stale_runs", step_stale_runs),
+            ("backup", step_backup),
+        ],
         "quiet": True,  # never notifies about itself unless it fails
     },
 }

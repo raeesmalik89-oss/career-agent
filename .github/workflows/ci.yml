@@ -28,6 +28,14 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  dependency-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv export --frozen --no-dev --format requirements-txt -o requirements.lock
+      - run: uvx pip-audit -r requirements.lock --disable-pip
+
   test-sqlite:
     runs-on: ubuntu-latest
     steps:
