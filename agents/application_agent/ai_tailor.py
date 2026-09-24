@@ -25,10 +25,29 @@ from app.services import settings_service
 from app.services.secrets import get_secret
 from integrations.llm import PROVIDERS, LLMError, Provider, chat_json
 
-MAX_JOB_CHARS = 8000
-MAX_FACT_CHARS = 14000
+MAX_JOB_CHARS = 3000
+MAX_FACT_CHARS = 6000
+MAX_OUTPUT_TOKENS = 2200  # Groq free tier: 8000 tokens/minute including this allowance
+SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["summary", "bullets", "cover_letter", "why_company"],
+    "properties": {
+        "summary": {"type": "string"},
+        "bullets": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": ["id", "text"],
+                "properties": {"id": {"type": "string"}, "text": {"type": "string"}},
+            },
+        },
+        "cover_letter": {"type": "array", "items": {"type": "string"}},
+        "why_company": {"type": "string"},
+    },
+}
 MAX_LINE = 400
-DROP_KEYS = {"sources", "conflicts", "evidence", "spans", "offsets", "raw", "source_text", "github", "confidence"}
 
 SYSTEM = """You tailor one job seeker's resume to one job posting. Honesty rules are absolute.
 
@@ -70,17 +89,28 @@ def ai_config(db: Session, user_id: uuid.UUID) -> tuple[Provider | None, str | N
 
 
 def _fact_brief(f: ProfileFact) -> dict | None:
-    """What the AI may read about one fact. Personal/contact facts are never sent."""
-    t = f.fact_type.value
-    if t in ("personal", "preference"):
-        return None
-    data = {k: v for k, v in f.data.items() if k not in DROP_KEYS and v not in (None, "", [], {})}
-    return {"id": str(f.id), "type": t, **data}
+    """A compact view of one fact for the AI. Contact details are never sent, and experience duties are not
+    repeated here: the ones chosen for this job are already the units being rewritten."""
+    t, d = f.fact_type.value, f.data
+    pick = {
+        "experience": ("title", "organization", "start", "end", "is_training", "sector", "technologies"),
+        "project": ("name", "technologies", "highlights"),
+        "education": ("qualification", "institution", "date", "grade"),
+        "certification": ("name", "issuer", "issued"),
+        "achievement": ("text", "metric", "context"),
+    }.get(t)
+    if pick is None:
+        return None  # personal / preference / skill_claim (skills are sent as one list instead)
+    out = {k: d[k] for k in pick if d.get(k) not in (None, "", [], {})}
+    if t == "project" and "highlights" in out:
+        out["highlights"] = out["highlights"][:3]
+    return {"id": str(f.id), "type": t, **out} if out else None
 
 
-def _facts_payload(facts: list[ProfileFact]) -> list[dict]:
-    out, size = [], 0
-    order = {"experience": 0, "project": 1, "skill_claim": 2, "education": 3, "certification": 4}
+def _facts_payload(facts: list[ProfileFact], skills: list[str]) -> dict:
+    """Everything the AI may use, within a size budget (free tiers limit tokens per minute)."""
+    items, size = [], 0
+    order = {"experience": 0, "project": 1, "education": 2, "certification": 3, "achievement": 4}
     for f in sorted(facts, key=lambda f: order.get(f.fact_type.value, 9)):
         b = _fact_brief(f)
         if b is None:
@@ -88,8 +118,8 @@ def _facts_payload(facts: list[ProfileFact]) -> list[dict]:
         size += len(json.dumps(b, ensure_ascii=False))
         if size > MAX_FACT_CHARS:
             break
-        out.append(b)
-    return out
+        items.append(b)
+    return {"items": items, "skills_with_evidence": skills}
 
 
 def _units(resume: dict) -> list[dict]:
@@ -104,8 +134,13 @@ def _units(resume: dict) -> list[dict]:
     return units
 
 
+# Typographic characters models like to emit; plain equivalents read reliably in ATS parsers and Word.
+PLAIN = str.maketrans({"‐": "-", "‑": "-", "‒": "-", "−": "-", " ": " ", " ": " ",
+                       " ": " ", "​": "", "‘": "'", "’": "'", "“": '"', "”": '"'})  # fmt: skip
+
+
 def _clean(text: object) -> str:
-    s = " ".join(str(text or "").split())
+    s = " ".join(str(text or "").translate(PLAIN).split())
     return s[:MAX_LINE].rstrip()
 
 
@@ -142,7 +177,9 @@ def tailor(
     units = _units(resume)
     request = {
         "job": {"title": job.title, "company": job.company, "text": (job.description or "")[:MAX_JOB_CHARS]},
-        "facts": _facts_payload(facts),
+        "facts": _facts_payload(
+            facts, sorted(s.name for s in profile.skills.values() if s.level in ("strong", "working"))
+        ),
         "units": units,
     }
 
@@ -150,7 +187,8 @@ def tailor(
     started = time.monotonic()
     try:
         out, usage = chat(provider, model=model, api_key=key, ollama_url=ollama_url, system=SYSTEM,
-                          user=json.dumps(request, ensure_ascii=False))  # fmt: skip
+                          user=json.dumps(request, ensure_ascii=False), schema=SCHEMA,
+                          max_tokens=MAX_OUTPUT_TOKENS)  # fmt: skip
     except LLMError as exc:
         raise AiTailorError(502, str(exc)) from None
     seconds = round(time.monotonic() - started, 1)

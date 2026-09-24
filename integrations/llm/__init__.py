@@ -10,6 +10,7 @@ as JSON and size-capped. No third-party SDK: nothing extra to install or audit.
 
 import json
 import re
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -119,6 +120,19 @@ class ProviderHTTPError(LLMError):
         return self.status == 404 or "model" in self.code.lower() and "not" in self.code.lower()
 
 
+RETRY_RX = re.compile(r"try again in (?:(\d+)m)?([\d.]+)s", re.IGNORECASE)
+MAX_WAIT_S = 25.0
+
+
+def _retry_after(message: str) -> float | None:
+    """Seconds to wait from a rate-limit message ("Please try again in 10.19s"), if short enough to wait for."""
+    m = RETRY_RX.search(message)
+    if not m:
+        return None
+    seconds = int(m.group(1) or 0) * 60 + float(m.group(2)) + 0.5
+    return seconds if seconds <= MAX_WAIT_S else None
+
+
 def list_models(provider: Provider, api_key: str | None, ollama_url: str | None = None) -> list[str]:
     """Chat models this key can use (OpenAI-compatible GET /models), best-known first."""
     url = endpoint(provider, ollama_url).removesuffix("/chat/completions") + "/models"
@@ -159,28 +173,61 @@ def chat_json(
     user: str,
     ollama_url: str | None = None,
     temperature: float = 0.3,
+    schema: dict | None = None,
+    max_tokens: int | None = None,
 ) -> tuple[dict, dict]:
-    """One chat completion that must return a JSON object. Returns (data, usage)."""
+    """One chat completion that must return a JSON object. Returns (data, usage).
+
+    With `schema`, Groq enforces it (structured outputs); other providers get plain JSON mode. If the provider's
+    own JSON check fails, the request is retried once without it and the answer is parsed leniently."""
     if provider.secret and not api_key:
         raise LLMError(f"no {provider.label} API key stored (Settings → AI)")
     url = endpoint(provider, ollama_url)
     chosen = model or provider.default_model
 
-    def call(m: str) -> bytes:
-        body = {
+    def response_format(mode: str) -> dict | None:
+        if mode == "schema" and schema is not None and provider.key == "groq":
+            # structured outputs: the model's output is forced to match the schema
+            return {"type": "json_schema", "json_schema": {"name": "result", "strict": True, "schema": schema}}
+        return {"type": "json_object"} if mode != "plain" else None
+
+    def call(m: str, mode: str) -> bytes:
+        body: dict = {
             "model": m,
             "temperature": temperature,
-            "response_format": {"type": "json_object"},
             # some providers (Groq) require the word "json" in the prompt when JSON output is requested
             "messages": [
                 {"role": "system", "content": system + "\n\nRespond with a single JSON object only."},
                 {"role": "user", "content": user},
             ],
         }
-        return _request(url, provider, api_key, body)
+        if (rf := response_format(mode)) is not None:
+            body["response_format"] = rf
+        if max_tokens:
+            body["max_tokens"] = max_tokens
+        if provider.key == "groq" and "gpt-oss" in m:
+            body["reasoning_effort"] = "low"  # rewriting needs little hidden reasoning; saves free-tier tokens
+        try:
+            return _request(url, provider, api_key, body)
+        except ProviderHTTPError as exc:
+            wait = _retry_after(str(exc)) if exc.status == 429 else None
+            if wait is None:
+                raise
+            time.sleep(wait)  # a short free-tier pause: wait it out once rather than failing
+            return _request(url, provider, api_key, body)
+
+    def call_json(m: str) -> bytes:
+        try:
+            return call(m, "schema")
+        except ProviderHTTPError as exc:
+            # the provider's JSON check rejected the output (e.g. Groq "Failed to validate JSON"):
+            # ask again without the constraint and parse the answer ourselves
+            if exc.status == 400 and "json" in str(exc).lower():
+                return call(m, "plain")
+            raise
 
     try:
-        raw = call(chosen)
+        raw = call_json(chosen)
     except ProviderHTTPError as exc:
         if not exc.model_missing:
             raise
@@ -189,7 +236,7 @@ def chat_json(
         if not available:
             raise LLMError(f"{exc} (and no other model is available for this key)") from None
         chosen = available[0]
-        raw = call(chosen)
+        raw = call_json(chosen)
     try:
         payload = json.loads(raw)
         content = payload["choices"][0]["message"]["content"] or ""

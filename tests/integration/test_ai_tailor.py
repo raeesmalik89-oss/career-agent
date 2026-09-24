@@ -17,7 +17,7 @@ from tests.integration.test_matching import _scan, profile  # noqa: F401 - share
 SENT: list[dict] = []
 
 
-def fake_ai(provider, *, model, api_key, system, user, ollama_url=None, temperature=0.3):
+def fake_ai(provider, *, model, api_key, system, user, ollama_url=None, temperature=0.3, **_opts):
     """Rewrites every bullet; invents Ansible in the first one and a percentage in one letter paragraph."""
     req = json.loads(user)
     SENT.append(req)
@@ -189,3 +189,35 @@ def test_retired_model_falls_back_and_prompt_mentions_json(monkeypatch):
     monkeypatch.setattr(llm, "_request", always_401)
     with pytest.raises(LLMError, match="rejected"):  # other errors are not retried with another model
         llm.chat_json(PROVIDERS["groq"], model=None, api_key="k" * 20, system="ping", user="x")
+
+
+def test_json_check_failure_is_retried_without_the_constraint(monkeypatch):
+    import integrations.llm as llm
+
+    modes = []
+
+    def fake_request(url, provider, api_key, body):
+        rf = body.get("response_format")
+        modes.append(rf["type"] if rf else "plain")
+        assert body["max_tokens"] == 50
+        if rf:
+            raise llm.ProviderHTTPError("Groq HTTP 400: Failed to validate JSON.", 400, "json_validate_failed")
+        return json.dumps({"choices": [{"message": {"content": 'Here you go: {"ok": true}'}}]}).encode()
+
+    monkeypatch.setattr(llm, "_request", fake_request)
+    out, _ = llm.chat_json(PROVIDERS["groq"], model=None, api_key="k" * 20, system="s", user="u",
+                           schema={"type": "object"}, max_tokens=50)  # fmt: skip
+    assert out == {"ok": True} and modes == ["json_schema", "plain"]
+
+
+def test_request_to_the_ai_is_compact_and_private(client, db, owner, profile, ai_on):  # noqa: F811
+    h = login(client, owner)
+    client.put("/api/v1/secrets", json={"name": "groq_api_key", "value": "gsk_fake_key_for_tests"}, headers=h)
+    app = _prepare(client, db, owner, h)
+    client.post(f"/api/v1/applications/{app['id']}/ai-tailor", headers=h)
+    req = SENT[-1]
+    kinds = {f["type"] for f in req["facts"]["items"]}
+    assert {"experience", "project", "education"} <= kinds  # nothing important is cut off
+    assert all("responsibilities" not in f for f in req["facts"]["items"])  # duties are sent once, as units
+    assert "Kubernetes" in req["facts"]["skills_with_evidence"]
+    assert len(json.dumps(req)) < 16000
