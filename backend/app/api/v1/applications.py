@@ -86,7 +86,8 @@ def _detail(db: Session, app: Application) -> dict:
     ).all()
     return _summary(db, app, job) | {
         "job_detail": _job_out(db, job),
-        "application_url": app.application_url,
+        # the employer's own page wins, even if it was added after the package was prepared
+        "application_url": job.employer_url or app.application_url,
         "resume": rv.parsed.get("resume") if rv else None,
         "resume_filename": rv.original_filename if rv else None,
         "resume_validation": app.policy_decision.get("resume_validation"),

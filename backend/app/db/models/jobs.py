@@ -83,6 +83,8 @@ class Job(IdMixin, TimestampMixin, Base):
     closing_date: Mapped[date | None] = mapped_column(Date)
     url: Mapped[str] = mapped_column(String(1000), nullable=False)
     application_url: Mapped[str | None] = mapped_column(String(1000))
+    # The employer's own page, set by the user; scans never overwrite it.
+    employer_url: Mapped[str | None] = mapped_column(String(1000))
     description: Mapped[str] = mapped_column(Text, nullable=False)
     description_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     content_version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)

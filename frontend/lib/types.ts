@@ -48,6 +48,8 @@ export interface JobSummary {
   posted_date: string | null;
   url: string;
   application_url: string | null;
+  employer_url: string | null;
+  aggregator_link: boolean;
   content_version: number;
   summary_only: boolean;
   first_seen_at: string;

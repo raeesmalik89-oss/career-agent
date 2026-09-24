@@ -7,7 +7,7 @@ import { Breakdown, EligibilityBadge, ScoreBlock } from "@/components/match";
 import { useIsOwner } from "@/components/shell";
 import { Badge, Button, Card, CardHeader, Disclaimer, ErrorNote, Loading, PageHeader } from "@/components/ui";
 import { ApiError, api } from "@/lib/api";
-import { KNOCKOUT_LABELS, daysAgo, fmtSalary, humanize } from "@/lib/format";
+import { KNOCKOUT_LABELS, applyUrl, daysAgo, employerSearchUrl, fmtSalary, humanize } from "@/lib/format";
 import type { ApplicationSummary, JobFull, MatchFull } from "@/lib/types";
 import { useApi } from "@/lib/use-api";
 
@@ -45,15 +45,23 @@ export default function JobPage() {
           <>
             <PrepareButton jobId={job.id} hidden={(m?.knockouts.length ?? 0) > 0} />
             <a
-              href={job.application_url ?? job.url}
+              href={applyUrl(job)}
               target="_blank"
               rel="noopener noreferrer nofollow"
               className="inline-flex h-9 items-center rounded-md border border-border bg-surface px-3.5 text-sm font-medium hover:bg-surface-2"
             >
-              Open posting ↗
+              {job.employer_url ? "Apply on employer's site ↗" : "Open posting ↗"}
             </a>
           </>
         }
+      />
+
+      <EmployerLink
+        job={job}
+        onSaved={async () => {
+          await match.reload();
+          await jobOnly.reload();
+        }}
       />
 
       {m ? (
@@ -329,5 +337,87 @@ function PrepareButton({ jobId, hidden }: { jobId: string; hidden: boolean }) {
         {busy ? "Preparing…" : "Prepare application"}
       </Button>
     </span>
+  );
+}
+
+function EmployerLink({ job, onSaved }: { job: JobFull; onSaved: () => Promise<void> }) {
+  const owner = useIsOwner();
+  const [url, setUrl] = useState("");
+  const [editing, setEditing] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<ApiError | null>(null);
+  if (!owner) return null;
+
+  async function save(value: string | null) {
+    setBusy(true);
+    setErr(null);
+    try {
+      await api.put(`/api/v1/jobs/${job.id}/employer-link`, { url: value });
+      setUrl("");
+      setEditing(false);
+      await onSaved();
+    } catch (e) {
+      setErr(e as ApiError);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (job.employer_url && !editing) {
+    return (
+      <p className="mb-4 text-sm text-muted">
+        Employer link: <a href={job.employer_url} target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">{job.employer_url}</a>{" "}
+        <button className="text-xs underline" onClick={() => setEditing(true)}>change</button>
+      </p>
+    );
+  }
+  if (!job.aggregator_link && !editing) {
+    return (
+      <p className="mb-4 text-xs text-muted">
+        <button className="underline" onClick={() => setEditing(true)}>Add the employer's own link</button>
+      </p>
+    );
+  }
+  return (
+    <Card className="mb-6 border-warn/40 p-4">
+      {job.aggregator_link && (
+        <>
+          <p className="text-sm font-medium">This posting came through a job board, not the employer.</p>
+          <p className="mt-1 text-sm text-muted">
+            Job-board links (Jooble, JobLeads and similar) often ask you to sign up or show paid “upgrade your resume” pages.
+            You never need them: find the same job on {job.company}&apos;s own careers page and apply there.
+          </p>
+          <a
+            href={employerSearchUrl(job.company, job.title)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-2 inline-block text-sm text-accent hover:underline"
+          >
+            Search for {job.company}&apos;s careers page ↗
+          </a>
+        </>
+      )}
+      <div className="mt-3 flex flex-wrap gap-2">
+        <input
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+          placeholder="https://company.com/careers/the-job"
+          aria-label="Employer's job link"
+          className="h-9 min-w-64 flex-1 rounded-md border border-border bg-bg px-3 text-sm"
+        />
+        <Button variant="primary" disabled={busy || !url.trim().startsWith("https://")} onClick={() => save(url.trim())}>
+          Save employer link
+        </Button>
+        {job.employer_url && (
+          <Button variant="ghost" disabled={busy} onClick={() => save(null)}>
+            Remove
+          </Button>
+        )}
+      </div>
+      <ErrorNote error={err} />
+      {job.summary_only && (
+        <p className="mt-2 text-xs text-muted">Tip: also paste the full posting below, so its real requirements are scored.</p>
+      )}
+    </Card>
   );
 }

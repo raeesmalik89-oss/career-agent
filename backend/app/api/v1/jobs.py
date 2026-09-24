@@ -1,6 +1,7 @@
 import hashlib
 import uuid
 from datetime import UTC, date, datetime
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl
@@ -42,6 +43,23 @@ class ManualJobIn(BaseModel):
     job_id: uuid.UUID | None = None
 
 
+# Job boards that resell or redirect postings. Their links often lead to sign-up walls or paid "resume upgrade"
+# pages, so the dashboard asks the user to apply on the employer's own site instead.
+AGGREGATOR_HOSTS = ("jooble.org", "jobleads.com", "whatjobs.com", "freehire.me", "talent.com", "adzuna.", "jobrapido.",
+                    "careerjet.", "glassdoor.", "indeed.", "ziprecruiter.")  # fmt: skip
+
+
+def is_aggregator(url: str | None) -> bool:
+    host = (urlparse(url or "").hostname or "").lower()
+    return any(h in host for h in AGGREGATOR_HOSTS)
+
+
+class EmployerLinkIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    url: HttpUrl | None = None  # null clears it
+
+
 class SecretIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -72,6 +90,8 @@ def _job_out(db: Session, job: Job, full: bool = False) -> dict:
         "posted_date": job.posted_date.isoformat() if job.posted_date else None,
         "url": job.url,
         "application_url": job.application_url,
+        "employer_url": job.employer_url,
+        "aggregator_link": is_aggregator(job.application_url or job.url) and not job.employer_url,
         "content_version": job.content_version,
         "summary_only": is_summary(job.description),
         "first_seen_at": job.first_seen_at.isoformat(),
@@ -256,3 +276,31 @@ def put_secret(
         request_id=ctx.request_id,
     )
     db.commit()
+
+
+@router.put("/jobs/{job_id}/employer-link")
+def set_employer_link(
+    job_id: uuid.UUID,
+    body: EmployerLinkIn,
+    user: User = Depends(owner_only),
+    db: Session = Depends(get_db),
+    ctx: RequestCtx = Depends(request_ctx),
+) -> dict:
+    """Save the employer's own posting/application page for a job (e.g. instead of a Jooble or JobLeads link)."""
+    job = db.get(Job, job_id)
+    if job is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "job not found")
+    url = str(body.url) if body.url else None
+    if url and not url.startswith("https://"):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "use the https:// link from the employer's site")
+    if url and is_aggregator(url):
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT, "that is a job-board link, not the employer's own site"
+        )
+    before = job.employer_url
+    job.employer_url = url
+    audit.record(db, action="jobs.employer_link", actor=Actor.user, user_id=user.id, entity_type="jobs",
+                 entity_id=job.id, before={"employer_url": before}, after={"employer_url": url},
+                 request_id=ctx.request_id)  # fmt: skip
+    db.commit()
+    return _job_out(db, job, full=True)

@@ -84,6 +84,16 @@ export function fmtSalary(s: { min: number; max: number | null; currency: string
   return s.max && s.max !== s.min ? `${cur} ${n(s.min)}–${n(s.max)}` : `${cur} ${n(s.min)}`;
 }
 
+/** Where "apply" should go: the employer's own page first, then the source's application link. */
+export function applyUrl(j: { employer_url?: string | null; application_url: string | null; url: string }): string {
+  return j.employer_url ?? j.application_url ?? j.url;
+}
+
+export function employerSearchUrl(company: string, title: string): string {
+  const q = `"${company}" ${title} careers`;
+  return `https://www.google.com/search?q=${encodeURIComponent(q)}`;
+}
+
 export function humanize(key: string): string {
   return key.replace(/_/g, " ").replace(/^\w/, (c) => c.toUpperCase());
 }

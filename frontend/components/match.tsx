@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { Component, Match } from "@/lib/types";
 import {
   COMPONENT_LABELS,
+  applyUrl,
   KNOCKOUT_LABELS,
   daysAgo,
   fmtSalary,
@@ -145,13 +146,18 @@ export function MatchCard({
           Full breakdown
         </Link>
         <a
-          href={j.application_url ?? j.url}
+          href={applyUrl(j)}
           target="_blank"
           rel="noopener noreferrer nofollow"
           className="inline-flex h-7 items-center rounded-md px-2.5 text-xs font-medium text-accent hover:bg-accent-soft"
         >
-          Open posting ↗
+          {j.employer_url ? "Employer's site ↗" : "Open posting ↗"}
         </a>
+        {j.aggregator_link && (
+          <Badge tone="warn" title="This link goes through a job board, which may ask you to sign up or pay. Open the job to add the employer's own link.">
+            job-board link
+          </Badge>
+        )}
         {onDismiss && !m.dismissed && (
           <Button size="sm" variant="ghost" onClick={() => onDismiss(m.match_id)} className="ml-auto">
             Dismiss

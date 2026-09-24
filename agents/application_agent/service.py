@@ -150,7 +150,7 @@ def prepare(db: Session, user_id: uuid.UUID, job_id: uuid.UUID, *, requested_by_
         match_id=match.id if match else None,
         status=ApplicationStatus.prepared,
         mode=ApplicationMode.assisted,
-        application_url=job.application_url or job.url,
+        application_url=job.employer_url or job.application_url or job.url,
         idempotency_key=hashlib.sha256(f"{user_id}|{job.id}|{job.content_version}".encode()).hexdigest(),
         policy_decision={"prepare": decision.dump()},
     )
