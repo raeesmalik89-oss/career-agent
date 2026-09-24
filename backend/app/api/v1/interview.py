@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from agents.interview_agent import service
-from agents.interview_agent.pack import SECTIONS, generate_pack
+from agents.interview_agent.pack import PACK_ORDER, SECTIONS, generate_pack
 from agents.interview_agent.rubric import DISCLAIMER
 from agents.interview_agent.service import InterviewError
 from app.db.enums import Actor
@@ -86,7 +86,8 @@ def get_pack(day: str, user: User = Depends(any_user), db: Session = Depends(get
     """Today's pack is created on first request; older packs are returned as they were."""
     d = _day(day)
     rows = list(db.scalars(select(InterviewQuestion).where(InterviewQuestion.user_id == user.id,
-                                                             InterviewQuestion.pack_date == d)))  # fmt: skip
+                                                             InterviewQuestion.pack_date == d)
+                           .order_by(*PACK_ORDER)))  # fmt: skip
     if not rows and d == datetime.now(UTC).date() and user.role.value == "owner":
         rows = generate_pack(db, user.id, d)
         db.commit()

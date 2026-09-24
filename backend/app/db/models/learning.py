@@ -64,6 +64,7 @@ class InterviewQuestion(IdMixin, TimestampMixin, Base):
     bank_id: Mapped[str | None] = mapped_column(String(120), index=True)
     key_points: Mapped[list] = mapped_column(JSONType, default=list, nullable=False)
     spoken_answer: Mapped[str | None] = mapped_column(Text)
+    position: Mapped[int | None] = mapped_column(Integer)  # planned order within the day's pack (0006)
 
 
 class InterviewSession(IdMixin, TimestampMixin, Base):

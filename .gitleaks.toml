@@ -1,0 +1,12 @@
+# gitleaks (CI "secrets-scan"): the default rules everywhere except tests/.
+# Tests use only invented data by project rule, including deliberately fake keys and tokens that prove
+# redaction, encryption and key handling work (e.g. "abcd-1234-efgh-5678"). Real credentials never go in the repo:
+# they live in .env (git-ignored) or encrypted in the database.
+title = "career-agent"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "fake credentials in tests"
+paths = ['''^tests/''']

@@ -152,10 +152,16 @@ def plan(db: Session, user_id: uuid.UUID, day: date) -> list[tuple[str, Candidat
     return sorted(chosen, key=lambda x: (order[x[0]], -x[1].priority))
 
 
+# The planned order (position); created_at and id only break ties for packs made before 0006.
+PACK_ORDER = (InterviewQuestion.position, InterviewQuestion.created_at, InterviewQuestion.id)
+
+
 def generate_pack(db: Session, user_id: uuid.UUID, day: date, *, regenerate: bool = False) -> list[InterviewQuestion]:
     existing = list(
         db.scalars(
-            select(InterviewQuestion).where(InterviewQuestion.user_id == user_id, InterviewQuestion.pack_date == day)
+            select(InterviewQuestion)
+            .where(InterviewQuestion.user_id == user_id, InterviewQuestion.pack_date == day)
+            .order_by(*PACK_ORDER)
         )
     )
     if existing and not regenerate:
@@ -166,11 +172,12 @@ def generate_pack(db: Session, user_id: uuid.UUID, day: date, *, regenerate: boo
         )
     skills = {s.canonical_name: str(s.id) for s in db.scalars(select(Skill))}
     rows = []
-    for section, c in plan(db, user_id, day):
+    for position, (section, c) in enumerate(plan(db, user_id, day)):
         q = c.q
         row = InterviewQuestion(
             user_id=user_id,
             pack_date=day,
+            position=position,
             section=section,
             bank_id=c.bank_id,
             question=q.q,
