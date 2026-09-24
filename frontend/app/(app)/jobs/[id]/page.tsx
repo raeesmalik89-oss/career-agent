@@ -1,14 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
 import { Breakdown, EligibilityBadge, ScoreBlock } from "@/components/match";
 import { useIsOwner } from "@/components/shell";
 import { Badge, Button, Card, CardHeader, Disclaimer, ErrorNote, Loading, PageHeader } from "@/components/ui";
 import { ApiError, api } from "@/lib/api";
 import { KNOCKOUT_LABELS, daysAgo, fmtSalary, humanize } from "@/lib/format";
-import type { JobFull, MatchFull } from "@/lib/types";
+import type { ApplicationSummary, JobFull, MatchFull } from "@/lib/types";
 import { useApi } from "@/lib/use-api";
 
 const CREDIT_TONE = (c: number) => (c >= 0.8 ? "good" : c >= 0.5 ? "warn" : "bad") as "good" | "warn" | "bad";
@@ -42,14 +42,17 @@ export default function JobPage() {
           </>
         }
         actions={
-          <a
-            href={job.application_url ?? job.url}
-            target="_blank"
-            rel="noopener noreferrer nofollow"
-            className="inline-flex h-9 items-center rounded-md border border-border bg-surface px-3.5 text-sm font-medium hover:bg-surface-2"
-          >
-            Open posting ↗
-          </a>
+          <>
+            <PrepareButton jobId={job.id} hidden={(m?.knockouts.length ?? 0) > 0} />
+            <a
+              href={job.application_url ?? job.url}
+              target="_blank"
+              rel="noopener noreferrer nofollow"
+              className="inline-flex h-9 items-center rounded-md border border-border bg-surface px-3.5 text-sm font-medium hover:bg-surface-2"
+            >
+              Open posting ↗
+            </a>
+          </>
         }
       />
 
@@ -291,5 +294,40 @@ function PasteFullPosting({ job, onDone }: { job: JobFull; onDone: () => Promise
         )}
       </div>
     </Card>
+  );
+}
+
+function PrepareButton({ jobId, hidden }: { jobId: string; hidden: boolean }) {
+  const owner = useIsOwner();
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  if (!owner) return null;
+
+  async function prepare() {
+    if (hidden && !confirm("This job is hidden by a knockout rule (see the reasons on this page). Prepare an application anyway?")) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      const app = await api.post<{ id: string }>("/api/v1/applications", { job_id: jobId });
+      router.push(`/applications/${app.id}`);
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 409) {
+        const mine = await api.get<ApplicationSummary[]>("/api/v1/applications");
+        const found = mine.find((a) => a.job.id === jobId);
+        if (found) return router.push(`/applications/${found.id}`);
+      }
+      setErr(e instanceof ApiError ? e.detail : String(e));
+      setBusy(false);
+    }
+  }
+
+  return (
+    <span className="flex items-center gap-2">
+      {err && <span className="text-xs text-bad">{err}</span>}
+      <Button variant="primary" disabled={busy} onClick={prepare} title="Builds a tailored resume, cover letter and answers from your facts. Nothing is sent.">
+        {busy ? "Preparing…" : "Prepare application"}
+      </Button>
+    </span>
   );
 }

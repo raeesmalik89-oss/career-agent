@@ -21,6 +21,21 @@ export const KNOCKOUT_LABELS: Record<string, string> = {
   unconfirmed: "Summary only",
 };
 
+export const STATUS_TONE: Record<string, Tone> = {
+  pending_approval: "warn",
+  prepared: "warn",
+  failed: "bad",
+  approved: "ok",
+  awaiting_manual_submit: "ok",
+  applied: "good",
+  interview: "good",
+  technical_interview: "good",
+  hr_interview: "good",
+  offer: "good",
+  rejected: "muted",
+  withdrawn: "muted",
+};
+
 export type Tone = "good" | "ok" | "warn" | "bad" | "muted";
 
 export function scoreTone(score: number, threshold: number, hidden = false): Tone {

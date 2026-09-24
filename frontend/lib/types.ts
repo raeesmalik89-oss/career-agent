@@ -165,3 +165,66 @@ export interface AgentRun {
   started_at: string;
   finished_at: string | null;
 }
+
+export interface ApplicationSummary {
+  id: string;
+  status: string;
+  mode: string;
+  job: { id: string; title: string; company: string; location: string | null };
+  score: number | null;
+  confidence: string | null;
+  created_at: string;
+  last_update: string;
+  submitted_at: string | null;
+}
+
+export interface ResumeItem {
+  text: string;
+  fact_ids: string[];
+}
+
+export interface TailoredResume {
+  header: Record<string, ResumeItem>;
+  summary: { text: string } | null;
+  skills: { group: string; items: (ResumeItem & { skill: string })[] }[];
+  experience: { title: string; organization: string; dates: string; note: string | null; bullets: ResumeItem[]; conflicts: boolean }[];
+  projects: { name: string; technologies: string[]; repo: string | null; bullets: ResumeItem[] }[];
+  education: { qualification: string; institution: string; date: string; grade: string | null }[];
+  certifications: { name: string; issuer: string | null; issued: string | null; credential_id: string | null }[];
+}
+
+export interface CheckItem {
+  path: string;
+  text: string;
+  status: "valid" | "needs_approval" | "unsupported";
+  notes: string[];
+}
+
+export interface PolicyTrace {
+  outcome: string;
+  policy_version: string;
+  trace: { rule: string; passed: boolean; detail: string }[];
+}
+
+export interface ApplicationAnswerRow {
+  id: string;
+  question: string;
+  answer: string;
+  category: string;
+  validation_status: "valid" | "needs_approval" | "unsupported";
+  validation_notes: string[];
+  cited_fact_ids: string[];
+  approved: boolean;
+}
+
+export interface ApplicationDetail extends ApplicationSummary {
+  application_url: string | null;
+  resume: TailoredResume | null;
+  resume_filename: string | null;
+  resume_validation: { items: CheckItem[]; counts: Record<string, number> } | null;
+  policy: { prepare: PolicyTrace | null; submission: PolicyTrace | null };
+  blockers: string[];
+  answers: ApplicationAnswerRow[];
+  events: { type: string; actor: string; at: string; detail: Record<string, unknown> }[];
+  next_statuses: string[];
+}

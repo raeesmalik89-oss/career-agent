@@ -16,8 +16,8 @@ The design is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 | 4 | Job Search Engine | ✅ done |
 | 5 | Matching Engine | ✅ done |
 | 6 | Dashboard | ✅ done |
-| 7 | Application Engine | next |
-| 8 | Interview Coach | |
+| 7 | Application Engine (assisted apply) | ✅ done |
+| 8 | Interview Coach | next |
 | 9 | Skill Gap + Concept Maps | |
 | 10 | Scheduler + Notifications | |
 | 11 | Observability + Security hardening | |
@@ -82,6 +82,15 @@ The design is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 - **Security**: the browser only talks to the dashboard's origin. `/api` is proxied to FastAPI, so the httpOnly SameSite=strict session cookies are used and page JavaScript never sees a token. Includes CSP, `X-Frame-Options: DENY`, `no-referrer`, and a redirect after login that only allows same-site paths.
 - New API: `GET /api/v1/dashboard`, `POST /api/v1/profile/facts/verify-bulk`.
 
+### What Milestone 7 contains
+- **Application Engine** (`agents/application_agent/`): press **Prepare application** on any job to get a tailored resume (DOCX, ATS-safe single column), a cover letter and a set of standard answers. **Nothing is ever sent**: every package waits in your approval queue.
+- **Tailoring only selects and reorders your facts.** Skills the job asks for come first; the most relevant bullets and projects are chosen; technologies you have no evidence for are never listed. Anything that needs your own words (why this company, salary) is left as a `[placeholder]` that blocks approval until you write or clear it.
+- **Validator (compliance)** checks every line: the cited fact must exist and not be rejected (else **unsupported**); every technology named must be in your evidence; every number must appear in a cited fact or be derived from dated facts ("Evidence not found." otherwise). Pending facts, conflicts and placeholders are marked for review. Unsupported lines block approval.
+- **Policy engine** with a stored rule trace (version `2026-09-24.1`): auto-submit needs auto-apply on, a source that allows automation, no unsupported or unreviewed items, no sensitive questions (open-ended, salary, visa, relocation, legal, demographic), non-low confidence, known eligibility and the daily limit. With your settings everything goes to approval.
+- **Assisted apply and tracking**: after you approve, open the posting, upload the resume, paste the answers (copy buttons), submit it yourself, then mark it applied; then interview stages, offer, rejected or withdrawn. Every step is an event plus an audit entry.
+- **Duplicate guard**: one application per job, plus a same-company, near-identical-title check within 60 days (reposts).
+- Automated form submission (browser automation) is not part of this milestone.
+
 ## API (so far)
 
 | Method | Path | Role |
@@ -104,6 +113,8 @@ The design is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 | POST | `/api/v1/matches/run` · `/api/v1/matches/seen` · `/api/v1/matches/{id}/dismiss` | owner |
 | PUT | `/api/v1/secrets` (stored encrypted, never returned) | owner |
 | GET | `/api/v1/dashboard` | any |
+| GET/POST | `/api/v1/applications` · GET `/applications/{id}` · `/resume.docx` · `/cover-letter.docx` | any / owner |
+| PATCH/POST | `/api/v1/applications/{id}/answers/{answer_id}` · `/approve` · `/reject` · `/rebuild` · `/status` | owner |
 | POST | `/api/v1/profile/facts/verify-bulk` | owner |
 | GET | `/api/v1/audit-logs` · `/api/v1/agent-runs` | owner |
 | GET | `/healthz` · `/readyz` · `/metrics` · `/docs` (dev only) | – |

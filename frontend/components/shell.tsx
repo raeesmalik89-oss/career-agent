@@ -11,6 +11,7 @@ import { Loading, cx } from "./ui";
 const NAV = [
   { href: "/", label: "Dashboard" },
   { href: "/matches", label: "Matches" },
+  { href: "/applications", label: "Applications" },
   { href: "/jobs", label: "All jobs" },
   { href: "/profile", label: "Profile & facts" },
   { href: "/github", label: "GitHub" },
@@ -74,7 +75,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <div className="mx-auto max-w-6xl px-4">
         {me.error && me.error.status !== 401 ? (
           <p className="py-10 text-sm text-bad">
-            Cannot reach the API ({me.error.detail}). Start the backend on port 8000 and reload.
+            Cannot reach the API ({me.error.detail}). Start it with start-career-agent.cmd and reload.
           </p>
         ) : (
           <Loading />
