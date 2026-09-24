@@ -28,6 +28,7 @@ def get_effective(db: Session, user_id: uuid.UUID) -> tuple[UserSettings, int]:
             scoring_weights=row.scoring_weights,
             policy=row.policy,
             schedules=row.schedules,
+            notifications=row.notifications or {},
         ),
         row.version,
     )

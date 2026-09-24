@@ -13,7 +13,7 @@ from app.db.models.learning import (
     LearningItem,
     SkillGap,
 )
-from app.db.models.ops import AgentRun, AuditLog, DailyReport, Notification
+from app.db.models.ops import AgentRun, AuditLog, DailyReport, Notification, PipelineRun, SchedulerState
 from app.db.models.profile import ProfileFact, ResumeProfile, ResumeVersion, Skill, UserSkill
 
 __all__ = [
@@ -40,9 +40,11 @@ __all__ = [
     "KnowledgeEdge",
     "LearningItem",
     "Notification",
+    "PipelineRun",
     "ProfileFact",
     "ResumeProfile",
     "ResumeVersion",
+    "SchedulerState",
     "Secret",
     "SettingsVersion",
     "Skill",

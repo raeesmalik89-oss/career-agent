@@ -32,8 +32,44 @@ interface SettingsDoc {
     knockout_experience_multiple: number;
     [k: string]: unknown;
   };
+  schedules: {
+    enabled: boolean;
+    timezone: string;
+    morning_scan: string;
+    afternoon_analysis: string;
+    evening_prep: string;
+    weekly_sync: string;
+    housekeeping: string;
+    delta_scans_enabled: boolean;
+    delta_scan: string;
+    catch_up_hours: number;
+    auto_prepare: boolean;
+  };
+  notifications: {
+    dashboard_url: string;
+    external_min_severity: "info" | "important" | "urgent";
+    quiet_hours_start: number | null;
+    quiet_hours_end: number | null;
+    email_enabled: boolean;
+    email_to: string | null;
+    email_from: string | null;
+    smtp_host: string | null;
+    smtp_port: number;
+    smtp_username: string | null;
+    daily_digest_email: boolean;
+    telegram_enabled: boolean;
+    telegram_chat_id: string | null;
+  };
   [k: string]: unknown;
 }
+
+const CRONS: ["morning_scan" | "afternoon_analysis" | "evening_prep" | "weekly_sync" | "housekeeping", string][] = [
+  ["morning_scan", "Morning job scan"],
+  ["afternoon_analysis", "Skill-gap analysis"],
+  ["evening_prep", "Evening prep + daily report"],
+  ["weekly_sync", "Weekly GitHub sync"],
+  ["housekeeping", "Housekeeping"],
+];
 
 export default function SettingsPage() {
   const owner = useIsOwner();
@@ -57,6 +93,10 @@ export default function SettingsPage() {
     setS({ ...s, preferences: { ...s.preferences, [k]: v } });
   const pol = <K extends keyof SettingsDoc["policy"]>(k: K, v: SettingsDoc["policy"][K]) =>
     setS({ ...s, policy: { ...s.policy, [k]: v } });
+  const sch = <K extends keyof SettingsDoc["schedules"]>(k: K, v: SettingsDoc["schedules"][K]) =>
+    setS({ ...s, schedules: { ...s.schedules, [k]: v } });
+  const ntf = <K extends keyof SettingsDoc["notifications"]>(k: K, v: SettingsDoc["notifications"][K]) =>
+    setS({ ...s, notifications: { ...s.notifications, [k]: v } });
   const toggle = (list: string[], v: string) => (list.includes(v) ? list.filter((x) => x !== v) : [...list, v]);
 
   async function save() {
@@ -214,9 +254,238 @@ export default function SettingsPage() {
             </div>
           </Card>
         </div>
+
+        <Card>
+          <CardHeader title="Automation" sub="Cron format: minute hour day month weekday (0 7 * * * = every day at 07:00)." />
+          <div className="space-y-3 px-4 py-4 text-sm">
+            <div className="flex flex-col gap-2">
+              <Check label="Run pipelines automatically" checked={s.schedules.enabled} onChange={(v) => sch("enabled", v)} />
+              <Check
+                label="Prepare application packages for new matches (never submits)"
+                checked={s.schedules.auto_prepare}
+                onChange={(v) => sch("auto_prepare", v)}
+              />
+            </div>
+            <Field label="Time zone">
+              <input
+                className="h-8 w-56 rounded-md border border-border bg-bg px-2 text-sm"
+                value={s.schedules.timezone}
+                onChange={(e) => sch("timezone", e.target.value)}
+              />
+            </Field>
+            {CRONS.map(([k, label]) => (
+              <div key={k} className="flex items-center justify-between gap-3">
+                <label htmlFor={`c-${k}`}>{label}</label>
+                <input
+                  id={`c-${k}`}
+                  className="h-8 w-36 rounded-md border border-border bg-bg px-2 font-mono text-xs"
+                  value={s.schedules[k]}
+                  onChange={(e) => sch(k, e.target.value)}
+                />
+              </div>
+            ))}
+            <div className="flex items-center justify-between gap-3">
+              <Check
+                label="Extra midday scan (4 more Jooble requests)"
+                checked={s.schedules.delta_scans_enabled}
+                onChange={(v) => sch("delta_scans_enabled", v)}
+              />
+              <input
+                aria-label="Midday scan schedule"
+                disabled={!s.schedules.delta_scans_enabled}
+                className="h-8 w-36 rounded-md border border-border bg-bg px-2 font-mono text-xs disabled:opacity-50"
+                value={s.schedules.delta_scan}
+                onChange={(e) => sch("delta_scan", e.target.value)}
+              />
+            </div>
+            <Field
+              label="Catch up missed runs up to this many hours late"
+              hint="If the computer was off at 07:00, the scan runs when the scheduler next starts, if still within this window."
+            >
+              <input
+                type="number"
+                min={0}
+                max={24}
+                className={num}
+                value={s.schedules.catch_up_hours}
+                onChange={(e) => sch("catch_up_hours", Number(e.target.value))}
+              />
+            </Field>
+          </div>
+        </Card>
+
+        <NotificationSettings s={s} ntf={ntf} num={num} dirty={dirty} owner={owner} />
       </fieldset>
       {!owner && <p className="mt-4 text-sm text-muted">Viewers can read settings but not change them.</p>}
     </>
+  );
+}
+
+type Ntf = SettingsDoc["notifications"];
+
+const orNull = (v: string) => (v.trim() ? v.trim() : null);
+
+function NotificationSettings({
+  s,
+  ntf,
+  num,
+  dirty,
+  owner,
+}: {
+  s: SettingsDoc;
+  ntf: <K extends keyof Ntf>(k: K, v: Ntf[K]) => void;
+  num: string;
+  dirty: boolean;
+  owner: boolean;
+}) {
+  const n = s.notifications;
+  const stored = useApi<{ smtp_password: boolean; telegram_bot_token: boolean }>(owner ? "/api/v1/notifications/channels" : null);
+  const [test, setTest] = useState<Record<string, { status: string | null; error: string | null }> | null>(null);
+  const [err, setErr] = useState<ApiError | null>(null);
+  const text = "h-8 w-full rounded-md border border-border bg-bg px-2 text-sm";
+
+  async function sendTest() {
+    setErr(null);
+    setTest(null);
+    try {
+      setTest(await api.post("/api/v1/notifications/test"));
+    } catch (e) {
+      setErr(e as ApiError);
+    }
+  }
+
+  return (
+    <Card className="lg:col-span-2">
+      <CardHeader
+        title="Notifications"
+        sub="Everything always appears under the bell icon. Email and Telegram are optional extra copies."
+        action={
+          owner && (
+            <Button size="sm" onClick={sendTest} disabled={dirty}>
+              {dirty ? "Save before testing" : "Send test"}
+            </Button>
+          )
+        }
+      />
+      <div className="grid gap-6 px-4 py-4 text-sm md:grid-cols-3">
+        <div className="space-y-3">
+          <Field label="Also send to email/Telegram when at least">
+            <select
+              className="h-8 rounded-md border border-border bg-bg px-2 text-sm"
+              value={n.external_min_severity}
+              onChange={(e) => ntf("external_min_severity", e.target.value as Ntf["external_min_severity"])}
+            >
+              <option value="info">info (everything)</option>
+              <option value="important">important (matches, packages, problems)</option>
+              <option value="urgent">urgent only</option>
+            </select>
+          </Field>
+          <Field label="Quiet hours" hint="Email/Telegram wait until quiet hours end (urgent ones excepted). Leave empty for none.">
+            <span className="flex items-center gap-2">
+              <input
+                type="number"
+                min={0}
+                max={23}
+                aria-label="Quiet hours start"
+                className={num}
+                value={n.quiet_hours_start ?? ""}
+                onChange={(e) => ntf("quiet_hours_start", e.target.value === "" ? null : Number(e.target.value))}
+              />
+              to
+              <input
+                type="number"
+                min={0}
+                max={23}
+                aria-label="Quiet hours end"
+                className={num}
+                value={n.quiet_hours_end ?? ""}
+                onChange={(e) => ntf("quiet_hours_end", e.target.value === "" ? null : Number(e.target.value))}
+              />
+            </span>
+          </Field>
+          <Field label="Dashboard address used in links">
+            <input className={text} value={n.dashboard_url} onChange={(e) => ntf("dashboard_url", e.target.value)} />
+          </Field>
+        </div>
+
+        <div className="space-y-3">
+          <Check label="Email" checked={n.email_enabled} onChange={(v) => ntf("email_enabled", v)} />
+          <Field label="Send to">
+            <input type="email" className={text} value={n.email_to ?? ""} onChange={(e) => ntf("email_to", orNull(e.target.value))} />
+          </Field>
+          <Field label="From address">
+            <input type="email" className={text} value={n.email_from ?? ""} onChange={(e) => ntf("email_from", orNull(e.target.value))} />
+          </Field>
+          <div className="flex gap-2">
+            <Field label="SMTP server">
+              <input className={text} placeholder="smtp.gmail.com" value={n.smtp_host ?? ""} onChange={(e) => ntf("smtp_host", orNull(e.target.value))} />
+            </Field>
+            <Field label="Port">
+              <input type="number" className={num} value={n.smtp_port} onChange={(e) => ntf("smtp_port", Number(e.target.value))} />
+            </Field>
+          </div>
+          <Field label="SMTP username">
+            <input className={text} value={n.smtp_username ?? ""} onChange={(e) => ntf("smtp_username", orNull(e.target.value))} />
+          </Field>
+          {owner && <SecretInput name="smtp_password" label="SMTP password (app password)" stored={stored.data?.smtp_password} onSaved={stored.reload} />}
+          <Check label="Email me the daily report" checked={n.daily_digest_email} onChange={(v) => ntf("daily_digest_email", v)} />
+        </div>
+
+        <div className="space-y-3">
+          <Check label="Telegram" checked={n.telegram_enabled} onChange={(v) => ntf("telegram_enabled", v)} />
+          <Field label="Chat ID" hint="Send your bot a message, then open api.telegram.org/bot(token)/getUpdates to see your chat id.">
+            <input className={text} value={n.telegram_chat_id ?? ""} onChange={(e) => ntf("telegram_chat_id", orNull(e.target.value))} />
+          </Field>
+          {owner && (
+            <SecretInput name="telegram_bot_token" label="Bot token (from @BotFather)" stored={stored.data?.telegram_bot_token} onSaved={stored.reload} />
+          )}
+          <ErrorNote error={err} />
+          {test && (
+            <ul className="space-y-1 text-xs">
+              {Object.entries(test).map(([ch, r]) => (
+                <li key={ch} className={r.status === "sent" ? "text-good" : "text-bad"}>
+                  {ch}: {r.status}
+                  {r.error ? ` (${r.error})` : ""}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+/** Write-only: the value is sent once, stored encrypted and never shown again. */
+function SecretInput({ name, label, stored, onSaved }: { name: string; label: string; stored?: boolean; onSaved: () => Promise<void> }) {
+  const [value, setValue] = useState("");
+  const [err, setErr] = useState<ApiError | null>(null);
+  async function save() {
+    setErr(null);
+    try {
+      await api.put("/api/v1/secrets", { name, value });
+      setValue("");
+      await onSaved();
+    } catch (e) {
+      setErr(e as ApiError);
+    }
+  }
+  return (
+    <Field label={label} hint={stored ? "Stored encrypted. Enter a new value to replace it." : "Not stored yet."}>
+      <span className="flex gap-2">
+        <input
+          type="password"
+          autoComplete="off"
+          className="h-8 w-full rounded-md border border-border bg-bg px-2 text-sm"
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+        />
+        <Button size="sm" onClick={save} disabled={value.trim().length < 4}>
+          Store
+        </Button>
+      </span>
+      <ErrorNote error={err} />
+    </Field>
   );
 }
 

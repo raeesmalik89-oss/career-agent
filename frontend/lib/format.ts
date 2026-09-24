@@ -160,3 +160,23 @@ export function factSources(f: Fact): string[] {
     return "source";
   });
 }
+
+/** "in 3 h", "in 12 min", "5 min ago", "2 d ago" — for schedules and run times. */
+export function relTime(iso: string | null | undefined, now: Date = new Date()): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  const diff = d.getTime() - now.getTime();
+  const mins = Math.round(Math.abs(diff) / 60_000);
+  const text = mins < 1 ? "now" : mins < 60 ? `${mins} min` : mins < 48 * 60 ? `${Math.round(mins / 60)} h` : `${Math.round(mins / 1440)} d`;
+  if (text === "now") return "just now";
+  return diff > 0 ? `in ${text}` : `${text} ago`;
+}
+
+export const RUN_TONE: Record<string, Tone> = {
+  running: "ok",
+  succeeded: "good",
+  partial: "warn",
+  failed: "bad",
+  skipped: "muted",
+};

@@ -374,3 +374,72 @@ export interface SkillGuide {
 export interface LearningPlan {
   skills: { skill: string; name: string; done: number; total: number; items: LearningItemRow[]; evidence: EvidenceStatus }[];
 }
+
+export type RunStatus = "running" | "succeeded" | "partial" | "failed";
+
+export interface PipelineStep {
+  step: string;
+  status: "succeeded" | "partial" | "failed" | "skipped";
+  summary?: Record<string, unknown>;
+  error?: string;
+  note?: string;
+  seconds?: number;
+}
+
+export interface PipelineRunRow {
+  id: string;
+  pipeline: string;
+  title: string;
+  trigger: "schedule" | "catch_up" | "manual";
+  status: RunStatus;
+  scheduled_for: string;
+  started_at: string;
+  finished_at: string | null;
+  steps: PipelineStep[];
+}
+
+export interface PipelinesInfo {
+  enabled: boolean;
+  timezone: string;
+  scheduler: { last_seen: string | null; running: boolean };
+  pipelines: {
+    name: string;
+    title: string;
+    about: string;
+    steps: string[];
+    cron: string | null;
+    schedule: string;
+    next_run: string | null;
+    last_run: PipelineRunRow | null;
+  }[];
+}
+
+export interface NotificationItem {
+  id: string;
+  kind: string;
+  severity: "info" | "important" | "urgent";
+  title: string;
+  body: string | null;
+  link: string | null;
+  created_at: string;
+  read_at: string | null;
+  delivered: Record<string, { status: string | null; error: string | null }>;
+}
+
+export interface NotificationsOut {
+  unread: number;
+  items: NotificationItem[];
+}
+
+export interface DailyReportSummary {
+  date: string;
+  generated_at: string;
+  headline: { new_jobs: number; qualifying_new: number; needs_you: number; answered: number };
+}
+
+export interface DailyReportDoc {
+  date: string;
+  generated_at: string;
+  metrics: Record<string, unknown>;
+  content_md: string;
+}

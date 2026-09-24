@@ -1,6 +1,7 @@
 from enum import StrEnum
+from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
 
 ROLE_FAMILIES = [
     "devops",
@@ -103,12 +104,63 @@ class Policy(Strict):
 
 
 class Schedules(Strict):
+    """When the automatic pipelines run (cron, in `timezone`). Missed runs (computer off) are caught up when the
+    scheduler next starts, if they are no older than catch_up_hours."""
+
+    enabled: bool = True
     timezone: str = "Asia/Karachi"
     morning_scan: str = "0 7 * * *"
     afternoon_analysis: str = "0 14 * * *"
     evening_prep: str = "0 20 * * *"
     weekly_sync: str = "0 10 * * 0"
+    housekeeping: str = "15 * * * *"
     delta_scans_enabled: bool = False
+    delta_scan: str = "0 13 * * *"
+    catch_up_hours: int = Field(12, ge=0, le=24)
+    auto_prepare: bool = True  # prepare (never submit) application packages for new qualifying matches
+
+    @model_validator(mode="after")
+    def _check(self):
+        from scheduler.cron import CronError, parse, zone
+
+        try:
+            zone(self.timezone)
+            for name in CRON_FIELDS:
+                parse(getattr(self, name))
+        except CronError as exc:
+            raise ValueError(str(exc)) from exc
+        return self
+
+
+CRON_FIELDS = ("morning_scan", "delta_scan", "afternoon_analysis", "evening_prep", "weekly_sync", "housekeeping")
+HOST_RX = r"^[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*$"
+
+
+class Notifications(Strict):
+    """Everything shows on the dashboard. Email and Telegram are optional extra channels; their passwords/tokens are
+    stored encrypted as secrets (smtp_password, telegram_bot_token), never here."""
+
+    dashboard_url: str = Field("http://localhost:3000", pattern=r"^https?://[^\s/]+(:\d+)?/?$")
+    external_min_severity: Literal["info", "important", "urgent"] = "important"
+    quiet_hours_start: int | None = Field(23, ge=0, le=23)
+    quiet_hours_end: int | None = Field(7, ge=0, le=23)
+    email_enabled: bool = False
+    email_to: EmailStr | None = None
+    email_from: EmailStr | None = None
+    smtp_host: str | None = Field(None, max_length=253, pattern=HOST_RX)
+    smtp_port: int = Field(587, ge=1, le=65535)
+    smtp_username: str | None = Field(None, max_length=200)
+    daily_digest_email: bool = True
+    telegram_enabled: bool = False
+    telegram_chat_id: str | None = Field(None, pattern=r"^(-?\d{1,20}|@[A-Za-z0-9_]{5,32})$")
+
+    @model_validator(mode="after")
+    def _check(self):
+        if self.email_enabled and not (self.email_to and self.email_from and self.smtp_host):
+            raise ValueError("email needs email_to, email_from and smtp_host")
+        if self.telegram_enabled and not self.telegram_chat_id:
+            raise ValueError("telegram needs telegram_chat_id")
+        return self
 
 
 class UserSettings(Strict):
@@ -116,6 +168,7 @@ class UserSettings(Strict):
     scoring_weights: ScoringWeights = ScoringWeights()
     policy: Policy = Policy()
     schedules: Schedules = Schedules()
+    notifications: Notifications = Notifications()
 
 
 class UserSettingsOut(UserSettings):

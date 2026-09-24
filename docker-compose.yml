@@ -1,5 +1,5 @@
-# Milestone 1 services. Workers, scheduler, frontend, browser sandbox and observability
-# are added in their milestones.
+# API + scheduler + PostgreSQL. The frontend image, browser sandbox and observability stack come in later
+# milestones.
 name: career-agent
 
 services:
@@ -45,6 +45,24 @@ services:
     tmpfs: [/tmp]
     security_opt: ["no-new-privileges:true"]
     networks: [backend]
+
+  scheduler:
+    # Same image as the API; runs the daily pipelines. Waits for the API, which applies the migrations.
+    build: .
+    command: ["python", "-m", "scheduler"]
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-career}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-career_agent}
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      disable: true
+    read_only: true
+    tmpfs: [/tmp]
+    security_opt: ["no-new-privileges:true"]
+    networks: [backend]
+    restart: unless-stopped
 
 volumes:
   pgdata:

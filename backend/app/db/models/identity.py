@@ -66,5 +66,6 @@ class SettingsVersion(IdMixin, TimestampMixin, Base):
     scoring_weights: Mapped[dict] = mapped_column(JSONType, nullable=False)
     policy: Mapped[dict] = mapped_column(JSONType, nullable=False)
     schedules: Mapped[dict] = mapped_column(JSONType, nullable=False)
+    notifications: Mapped[dict | None] = mapped_column(JSONType)  # added in 0005; older rows use defaults
 
     __table_args__ = (UniqueConstraint("user_id", "version"),)

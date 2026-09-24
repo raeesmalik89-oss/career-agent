@@ -17,6 +17,7 @@ const NAV = [
   { href: "/jobs", label: "All jobs" },
   { href: "/profile", label: "Profile & facts" },
   { href: "/github", label: "GitHub" },
+  { href: "/automation", label: "Automation" },
   { href: "/settings", label: "Settings" },
   { href: "/activity", label: "Activity" },
 ];
@@ -55,6 +56,44 @@ function ThemeToggle() {
     <button onClick={next} className="rounded-md px-2 py-1 text-xs text-muted hover:bg-surface-2" title="Colour theme">
       Theme: {theme}
     </button>
+  );
+}
+
+/** Unread notifications, refreshed every minute and whenever the page changes. */
+function NotificationBell({ pathname }: { pathname: string }) {
+  const [unread, setUnread] = useState<number | null>(null);
+  useEffect(() => {
+    let alive = true;
+    const load = () =>
+      api
+        .get<{ unread: number }>("/api/v1/notifications/unread-count")
+        .then((r) => alive && setUnread(r.unread))
+        .catch(() => undefined);
+    void load();
+    const t = setInterval(load, 60_000);
+    return () => {
+      alive = false;
+      clearInterval(t);
+    };
+  }, [pathname]);
+  const active = pathname.startsWith("/notifications");
+  return (
+    <Link
+      href="/notifications"
+      className={cx("relative rounded-md px-2 py-1 text-muted hover:bg-surface-2", active && "text-text")}
+      aria-label={unread ? `Notifications, ${unread} unread` : "Notifications"}
+      title="Notifications"
+    >
+      <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.8} aria-hidden>
+        <path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
+        <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
+      </svg>
+      {unread ? (
+        <span className="absolute -right-0.5 -top-0.5 min-w-4 rounded-full bg-accent px-1 text-center text-[10px] font-semibold leading-4 text-white tabular dark:text-[#0f1115]">
+          {unread > 99 ? "99+" : unread}
+        </span>
+      ) : null}
+    </Link>
   );
 }
 
@@ -111,6 +150,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               );
             })}
           </nav>
+          <NotificationBell pathname={pathname} />
           <div className="hidden shrink-0 items-center gap-1 md:flex">
             <ThemeToggle />
             <span className="px-1 text-xs text-muted" title={me.data.email}>

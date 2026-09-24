@@ -543,6 +543,8 @@ career-agent/
 
 Guardrails: daily LLM budget cap (USD, configurable). If it is exceeded, only deterministic steps run and a notification is sent.
 
+**As built (Milestone 10):** a single-user install does not need Celery Beat + Redis. `scheduler/` is a small, time-zone-aware cron loop (`python -m scheduler`). Each slot (user, pipeline, fire time) is claimed by inserting a unique `pipeline_runs` row, which gives exactly-once runs across restarts or duplicate processes. Missed slots are caught up within `catch_up_hours`. Steps commit one by one and record their own status. The pipeline definitions live in `scheduler/pipelines.py`, not YAML, so every step is plain, tested Python. Celery remains an option if the platform ever needs multiple workers.
+
 ---
 
 ## 16. Example daily workflow (illustrative, not real data)

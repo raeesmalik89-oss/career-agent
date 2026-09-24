@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { daysAgo, factSources, factSubtitle, factTitle, fmtSalary, fmtScore, scoreTone } from "./format";
+import { daysAgo, factSources, factSubtitle, factTitle, fmtSalary, fmtScore, relTime, scoreTone } from "./format";
 import type { Fact } from "./types";
 
 const fact = (fact_type: string, data: Record<string, unknown>, sources: Record<string, unknown>[] = []): Fact => ({
@@ -53,5 +53,17 @@ describe("dates and money", () => {
     expect(fmtSalary(null)).toBeNull();
     expect(fmtSalary({ min: 60000, max: 80000, currency: "USD" })).toBe("USD 60k–80k");
     expect(fmtSalary({ min: 300000, max: null, currency: "PKR" })).toBe("PKR 300k");
+  });
+});
+
+describe("relTime", () => {
+  const now = new Date("2026-09-24T02:00:00Z");
+  it("describes future and past times", () => {
+    expect(relTime("2026-09-24T05:00:00Z", now)).toBe("in 3 h");
+    expect(relTime("2026-09-24T02:12:00Z", now)).toBe("in 12 min");
+    expect(relTime("2026-09-24T01:55:00Z", now)).toBe("5 min ago");
+    expect(relTime("2026-09-21T02:00:00Z", now)).toBe("3 d ago");
+    expect(relTime("2026-09-24T02:00:10Z", now)).toBe("just now");
+    expect(relTime(null, now)).toBe("—");
   });
 });

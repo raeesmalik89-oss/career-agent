@@ -51,10 +51,39 @@ class AuditLog(IdMixin, Base):
     at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True, nullable=False)
 
 
-class Notification(IdMixin, Base):
-    __tablename__ = "notifications"
+class PipelineRun(IdMixin, Base):
+    """One execution of a scheduled pipeline. (user, pipeline, scheduled_for) is unique, so two scheduler processes
+    (or a restart during a run) can never run the same slot twice."""
+
+    __tablename__ = "pipeline_runs"
+    __table_args__ = (UniqueConstraint("user_id", "pipeline", "scheduled_for"),)
 
     user_id: Mapped[uuid.UUID] = user_fk()
+    pipeline: Mapped[str] = mapped_column(String(40), index=True, nullable=False)
+    scheduled_for: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    trigger: Mapped[str] = mapped_column(String(20), nullable=False)  # schedule | catch_up | manual
+    status: Mapped[str] = mapped_column(String(20), nullable=False)  # running | succeeded | partial | failed
+    steps: Mapped[list] = mapped_column(JSONType, default=list, nullable=False)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class SchedulerState(Base):
+    """Small key/value rows the scheduler process writes (e.g. its heartbeat) so the dashboard can show them."""
+
+    __tablename__ = "scheduler_state"
+
+    key: Mapped[str] = mapped_column(String(60), primary_key=True)
+    value: Mapped[dict] = mapped_column(JSONType, default=dict, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+
+class Notification(IdMixin, Base):
+    __tablename__ = "notifications"
+    __table_args__ = (UniqueConstraint("user_id", "dedup_key"),)
+
+    user_id: Mapped[uuid.UUID] = user_fk()
+    dedup_key: Mapped[str | None] = mapped_column(String(160))  # e.g. match:<job id>: one notification per job
     kind: Mapped[str] = mapped_column(String(50), nullable=False)
     severity: Mapped[str] = mapped_column(String(10), default="info", nullable=False)
     title: Mapped[str] = mapped_column(String(300), nullable=False)

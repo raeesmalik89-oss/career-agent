@@ -13,10 +13,10 @@ from agents.base import Agent, AgentContext
 from agents.job_agent.ingest import store_raw, upsert_job
 from agents.resume_agent.agent import sync_taxonomy
 from agents.taxonomy import Taxonomy, get_taxonomy
-from app.core import crypto
 from app.db.enums import Confidence
-from app.db.models import Job, JobRaw, JobSource, Secret
+from app.db.models import Job, JobRaw, JobSource
 from app.services import settings_service
+from app.services.secrets import get_secret
 from integrations.sources.base import Connector, HttpClient, JobPosting, SourceError
 from integrations.sources.connectors import CONNECTORS
 
@@ -55,15 +55,10 @@ def build_queries(families: list[str]) -> list[str]:
     return out
 
 
-def _secret(db, user_id: uuid.UUID, name: str) -> str | None:
-    row = db.scalars(select(Secret).where(Secret.user_id == user_id, Secret.name == name)).first()
-    return crypto.clean_secret(crypto.decrypt(row.ciphertext, name.encode())) if row else None
-
-
 def make_connector(src: JobSource, http: HttpClient, db, user_id: uuid.UUID) -> Connector:
     config = dict(src.config or {})
     if src.key == "jooble":
-        config["api_key"] = _secret(db, user_id, "jooble_api_key")
+        config["api_key"] = get_secret(db, user_id, "jooble_api_key")
     return CONNECTORS[src.key](http, config)
 
 

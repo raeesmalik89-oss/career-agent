@@ -17,6 +17,8 @@ COPY alembic.ini ./
 COPY backend ./backend
 COPY agents ./agents
 COPY integrations ./integrations
+COPY scheduler ./scheduler
+COPY data ./data
 ENV PATH="/app/.venv/bin:$PATH"
 USER app
 EXPOSE 8000

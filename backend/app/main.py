@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from app.api.v1 import (
     applications,
     auth,
+    automation,
     dashboard,
     github,
     interview,
@@ -74,6 +75,7 @@ def create_app() -> FastAPI:
         interview.router,
         skills.router,
         ops.router,
+        automation.router,
     ):
         app.include_router(r, prefix="/api/v1")
 

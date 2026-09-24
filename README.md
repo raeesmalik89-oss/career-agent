@@ -19,8 +19,8 @@ The design is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 | 7 | Application Engine (assisted apply) | ✅ done |
 | 8 | Interview Coach | ✅ done |
 | 9 | Skill Gap + Concept Maps | ✅ done |
-| 10 | Scheduler + Notifications | next |
-| 11 | Observability + Security hardening | |
+| 10 | Scheduler + Notifications | ✅ done |
+| 11 | Observability + Security hardening | next |
 | 12 | Testing + Deployment | |
 
 ### What Milestone 1 contains
@@ -106,6 +106,25 @@ The design is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 - **Learning plan**: six checklist items per skill. **Completing items never changes a skill level**; only evidence does (the CV, or code the GitHub analyser finds).
 - **New GitHub detectors**, so learning turns into evidence: Java (sources, pom.xml, Gradle), PowerShell scripts, Datadog (ddtrace, agent config), SLO specs (Sloth, OpenSLO, SLO recording rules, which also imply SRE), vector stores (Chroma, FAISS, Pinecone, Qdrant, Weaviate, pgvector), RAG (a vector store plus retrieval code) and agents (LangGraph StateGraph, tool definitions, CrewAI, AutoGen, MCP).
 
+### What Milestone 10 contains
+- **Scheduler** (`scheduler/`, run as `python -m scheduler`; `start-career-agent.cmd` opens it in a minimised window). A small cron engine (5 fields, time-zone aware, default Asia/Karachi) replaces Celery Beat for this single-user install. There is no Redis or broker; the database is the source of truth.
+- **Pipelines** (times editable under Settings → Automation):
+  - `morning_scan` 07:00: scan, dedupe, score, alert on new matches at or above your threshold (capped at 10 plus a summary), and **prepare** packages for up to 5 of them. It never submits.
+  - `delta_scan`: optional midday scan, off by default to save Jooble quota.
+  - `afternoon_analysis` 14:00: 1/7/30-day skill gaps, with an alert when a skill enters your top 5.
+  - `evening_prep` 20:00: tomorrow's interview pack and today's Daily Career Report.
+  - `weekly_sync` Sunday 10:00: GitHub re-sync and re-score.
+  - `housekeeping` hourly: retries failed email/Telegram deliveries and closes interrupted runs.
+- **Exactly once**: each slot (user, pipeline, fire time) is a unique `pipeline_runs` row, so restarts or a second scheduler never double-run it. A slot missed while the computer was off is **caught up** when the scheduler next starts, if at most `catch_up_hours` (default 12) late, and it works for its own date (yesterday's report is yesterday's). Only one pipeline runs at a time. Steps commit separately; a failing step is recorded, the others still run, and you get an alert.
+- **Notifications**: always shown under the bell icon, and optionally copied by **email** (SMTP, TLS required) or **Telegram**.
+  - A dedup key means one alert per job, however often scans repeat, and alerts skip matches you have already opened.
+  - Email and Telegram only get alerts at or above a chosen severity, and wait out quiet hours (urgent ones excepted).
+  - Failed deliveries are retried up to 5 times.
+  - The SMTP password and bot token are stored encrypted; errors are scrubbed of them.
+- **Daily Career Report** (`agents/report_agent/daily.py`): counts only, with nothing estimated. It covers postings fetched, new jobs, matches, what hid jobs, applications waiting for you, interview practice, learning progress, top gaps, pipeline results and Jooble quota. It can also be emailed as a digest.
+- **Dashboard**: an **Automation** page (scheduler status, next and last run, run now, step details), **Notifications** (bell with unread count), **Daily reports**, and new Settings cards for Automation and Notifications (with Send test).
+- SQLite now uses WAL and a busy timeout, because the API and the scheduler share the file. Migration `0005` adds `pipeline_runs`, `scheduler_state`, notification dedup keys and notification settings.
+
 ## API (so far)
 
 | Method | Path | Role |
@@ -135,6 +154,11 @@ The design is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 | POST | `/api/v1/interview/packs/today/regenerate` · `/interview/sessions` · `/sessions/{id}/answer` · `/sessions/{id}/end` | owner |
 | GET | `/api/v1/skills/gaps?window=1\|7\|30` · `/api/v1/learning` · `/api/v1/learning/skills/{key}` | any |
 | POST/PATCH | `/api/v1/learning/plan` · `/api/v1/learning/items/{id}` | owner |
+| GET | `/api/v1/pipelines` · `/api/v1/pipeline-runs` | any |
+| POST | `/api/v1/pipelines/{name}/run` (runs in the background; `?wait=true` to block) | owner |
+| GET | `/api/v1/notifications` (unread, before, limit) · `/notifications/unread-count` | any |
+| POST | `/api/v1/notifications/{id}/read` · `/notifications/read-all` · `/notifications/test` · GET `/notifications/channels` | owner |
+| GET | `/api/v1/reports/daily` · `/api/v1/reports/daily/{date}` · POST `/api/v1/reports/daily` (build now) | any / owner |
 | GET | `/api/v1/audit-logs` · `/api/v1/agent-runs` | owner |
 | GET | `/healthz` · `/readyz` · `/metrics` · `/docs` (dev only) | – |
 
@@ -171,8 +195,15 @@ PYTHONPATH=backend:. uv run uvicorn app.main:app --app-dir backend --host 127.0.
 ```
 
 ### Everyday use on Windows (double-click)
-- `start-career-agent.cmd` starts the API (port 8010, so it never clashes with a WSL server on 8000) and the dashboard, then opens http://localhost:3000. Close its two windows to stop.
-- `scan-jobs.cmd` runs a scan and re-scores (about 4 Jooble requests), then you look at **Matches**.
+- `start-career-agent.cmd` applies any database migrations and starts three windows:
+  - the API, on port 8010 so it never clashes with a WSL server on 8000;
+  - the scheduler, minimised;
+  - the dashboard.
+
+  It then opens http://localhost:3000. Close the three windows to stop.
+- While the scheduler runs, scans and reports happen by themselves (Automation page). Leave it open, or start it any time: missed runs from the last 12 hours are caught up.
+- `scan-jobs.cmd` still runs a scan by hand (about 4 Jooble requests). So does **Run now** on the Automation page, or `uv run python -m app.cli run-pipeline --email you@example.com morning_scan`.
+- Scheduler without the dashboard: `set PYTHONPATH=backend;.` then `.venv\Scripts\python.exe -m scheduler` (add `--once` for a single pass, e.g. from Windows Task Scheduler).
 
 ### Dashboard (Windows, Node 24+)
 Start the API first (port 8000), then in a second terminal:

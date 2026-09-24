@@ -312,6 +312,26 @@ def report(email: str, out: str | None) -> None:
         print(text)
 
 
+def run_pipeline(email: str, name: str) -> None:
+    from scheduler.pipelines import PIPELINES
+    from scheduler.runner import PipelineBusy, execute, run_now
+
+    if name not in PIPELINES:
+        sys.exit(f"pipeline must be one of {sorted(PIPELINES)}")
+    with get_sessionmaker()() as db:
+        user = _user(db, email)
+        try:
+            run = run_now(db, user.id, name)
+        except PipelineBusy as exc:
+            sys.exit(str(exc))
+        settings, _ = settings_service.get_effective(db, user.id)
+        execute(db, run, settings)
+        for step in run.steps:
+            detail = step.get("error") or step.get("note") or step.get("summary")
+            print(f"  {step['step']:<20} {step['status']:<10} {detail}")
+        print(f"{name}: {run.status}")
+
+
 def create_owner(email: str, name: str, password: str | None) -> None:
     password = password or getpass.getpass("Owner password (min 12 chars): ")
     if len(password) < MIN_PASSWORD:
@@ -380,6 +400,9 @@ def main(argv: list[str] | None = None) -> None:
     rp = sub.add_parser("report")
     rp.add_argument("--email", required=True)
     rp.add_argument("--out")
+    rpl = sub.add_parser("run-pipeline", help="run a scheduled pipeline now (morning_scan, evening_prep, ...)")
+    rpl.add_argument("--email", required=True)
+    rpl.add_argument("name")
     args = p.parse_args(argv)
     if args.cmd == "gen-keys":
         gen_keys()
@@ -396,6 +419,8 @@ def main(argv: list[str] | None = None) -> None:
         sources_cmd(args.enable, args.disable, companies)
     elif args.cmd == "scan-jobs":
         scan_jobs(args.email, args.source)
+    elif args.cmd == "run-pipeline":
+        run_pipeline(args.email, args.name)
     elif args.cmd == "reanalyze-jobs":
         reanalyze_jobs()
     elif args.cmd == "match-jobs":
