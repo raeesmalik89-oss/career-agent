@@ -1,0 +1,259 @@
+# Learning guides. Schema: agents/skill_agent/learning.py
+- key: sre
+  title: Site Reliability Engineering (SRE)
+  why: >-
+    SRE appears in about a quarter of the jobs open to you. Your CV lists it, but no project shows SLOs, error
+    budgets or incident practice yet, so interviewers will probe it.
+  explanation: >-
+    SRE is software engineering applied to operations. Instead of "never fail", you agree how reliable a service
+    must be (an SLO, for example 99.9% of requests succeed in under 300 ms over 30 days), measure it with SLIs from
+    real traffic, and treat the remaining 0.1% as an error budget. When the budget is healthy, the team ships
+    faster; when it is spent, reliability work comes first. SREs cap manual toil, automate it away, run incidents
+    with clear roles, and write blameless postmortems so the same failure does not happen twice.
+  cheatsheet:
+    - "SLI = measured ratio of good events: good / valid requests (availability, latency, freshness)."
+    - "SLO = target for an SLI over a window, e.g. 99.9% over 30 days = about 43 minutes of budget."
+    - "SLA = contract with customers; always looser than the internal SLO."
+    - "Error budget = 1 - SLO. Burn rate = how fast you are spending it (1 = exactly on budget)."
+    - "Alert on burn rate (e.g. 14.4x over 1 h and 6x over 6 h), not on CPU."
+    - "Golden signals: latency, traffic, errors, saturation."
+    - "Toil: manual, repetitive, automatable work that grows with the service; keep it under 50%."
+    - "Incident roles: commander, communications, operations. Mitigate first, then find the root cause."
+  commands:
+    - {cmd: "sum(rate(http_requests_total{code!~\"5..\"}[5m])) / sum(rate(http_requests_total[5m]))", what: "PromQL availability SLI"}
+    - {cmd: "histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))", what: "p99 latency"}
+    - {cmd: "sloth generate -i slo.yaml -o rules.yaml", what: "generate Prometheus SLO and burn-rate rules from a Sloth spec"}
+    - {cmd: "kubectl rollout undo deployment/api", what: "fastest mitigation after a bad deploy"}
+  lab:
+    goal: Define and alert on an SLO for a small web service.
+    steps:
+      - Run a FastAPI or Flask app with prometheus_client exposing http_requests_total and a latency histogram.
+      - Run Prometheus and Grafana with Docker Compose and scrape the app.
+      - Write an SLO spec (Sloth) for 99.5% availability over 30 days and generate the recording and alert rules.
+      - Load Prometheus with the rules and build a Grafana panel showing the remaining error budget.
+      - Inject errors (return 500 for 10% of requests) and watch the burn-rate alert fire.
+      - Write a one-page blameless postmortem of your injected incident.
+    done_when: The burn-rate alert fires during the injected errors and clears after you stop them.
+  troubleshooting:
+    - {problem: "Alert fires constantly although users are fine", fix: "You are alerting on causes (CPU, memory). Alert on SLO burn rate instead, and move cause metrics to dashboards."}
+    - {problem: "SLO always shows 100%", fix: "The SLI only counts successful requests, or health checks dominate. Count valid user requests and exclude health checks."}
+    - {problem: "Error budget spent every month", fix: "Either the SLO is unrealistic for the architecture or reliability work is being skipped; agree a policy (freeze features until budget recovers)."}
+  mini_project:
+    title: SLO-driven monitoring for one of your existing services
+    brief: >-
+      Add SLOs, burn-rate alerts, a Grafana error-budget dashboard and a runbook to one of your repositories (for
+      example CardioCare-AIOps), plus a postmortem of a failure you injected on purpose.
+    steps:
+      - Add a Sloth or OpenSLO spec file (slo/*.yaml) and the generated Prometheus rules.
+      - Add Grafana dashboard JSON for SLI, SLO and remaining budget.
+      - Write docs/runbook.md and docs/postmortem-001.md.
+    evidence: >-
+      The GitHub analyser detects the SLO spec and the SLO recording rules as SLO evidence, which also counts as SRE
+      evidence, plus Prometheus and Grafana configuration. Re-run GitHub sync after pushing.
+  resources:
+    - {title: "Google SRE book (free)", url: "https://sre.google/sre-book/table-of-contents/"}
+    - {title: "The SRE workbook: implementing SLOs", url: "https://sre.google/workbook/implementing-slos/"}
+    - {title: "Sloth SLO generator", url: "https://sloth.dev/"}
+  concept_map:
+    concept: SRE
+    components: [SLIs, SLOs, Error budgets, Toil budget, On-call and incident response, Postmortems]
+    interactions:
+      - {label: "SLIs feed SLOs", children: ["error budget = 1 - SLO", "burn-rate alerts"]}
+      - {label: "Error budget drives release pace", children: ["healthy: ship", "spent: reliability work"]}
+    production_use: ["Burn-rate paging", "Release freezes", "Capacity planning"]
+    devops_use: ["SLOs as code (Sloth/OpenSLO)", "Canary analysis against SLIs", "Automated rollback"]
+    interview_traps: ["100% SLO", "Alerting on CPU instead of user impact", "Blame in postmortems"]
+    commands: ["sloth generate -i slo.yaml", "kubectl rollout undo deployment/api"]
+    troubleshooting: ["Noisy alerts", "SLI counts health checks", "Budget always spent"]
+    related: [Observability, Prometheus, Incident management, Chaos engineering]
+
+- key: gcp
+  title: Google Cloud Platform (GCP)
+  why: >-
+    GCP appears in about a quarter of the jobs open to you. You already know AWS and Azure, so this is mostly
+    mapping concepts you know to Google's names.
+  explanation: >-
+    GCP organises everything in projects (billing and permission boundary) inside folders and an organisation.
+    Compute runs on Compute Engine VMs, GKE (Kubernetes, including Autopilot) and Cloud Run (serverless
+    containers). Networking uses global VPCs with regional subnets. IAM binds roles to principals, and workloads
+    use service accounts; on GKE, Workload Identity lets pods act as a service account without keys. Storage is
+    Cloud Storage buckets, databases are Cloud SQL, Spanner or Firestore, and BigQuery is the data warehouse.
+    Monitoring and logging are Cloud Monitoring and Cloud Logging. Terraform's google provider covers it all.
+  cheatsheet:
+    - "AWS account ~ GCP project. AWS IAM role for a workload ~ GCP service account."
+    - "EC2 ~ Compute Engine, EKS ~ GKE, Lambda/Fargate ~ Cloud Functions/Cloud Run, S3 ~ Cloud Storage, RDS ~ Cloud SQL."
+    - "VPCs are global in GCP; subnets are regional (in AWS, VPCs are regional)."
+    - "Use Workload Identity (federation) instead of downloading service-account keys."
+    - "GKE Autopilot manages nodes for you; Standard gives node-pool control."
+    - "Artifact Registry stores container images and packages."
+  commands:
+    - {cmd: "gcloud config set project PROJECT_ID", what: "select the project"}
+    - {cmd: "gcloud container clusters get-credentials CLUSTER --region REGION", what: "kubectl access to GKE"}
+    - {cmd: "gcloud run deploy api --image REGION-docker.pkg.dev/PROJECT/repo/api:TAG --region REGION", what: "deploy a container to Cloud Run"}
+    - {cmd: "gcloud iam service-accounts create deployer", what: "create a service account"}
+    - {cmd: "terraform init && terraform plan", what: "plan GCP resources with the google provider"}
+  lab:
+    goal: Deploy a containerised API to Cloud Run with Terraform, using the free tier.
+    steps:
+      - Create a GCP project with a budget alert of a few dollars.
+      - Write Terraform with the google provider for an Artifact Registry repository, a service account and a Cloud Run service.
+      - Build and push your FastAPI image with Cloud Build or GitHub Actions.
+      - Give the service account only the roles it needs; make the service public or private deliberately.
+      - Add a GitHub Actions workflow using Workload Identity Federation (no JSON key).
+    done_when: A push to main deploys a new Cloud Run revision without any stored key.
+  troubleshooting:
+    - {problem: "PERMISSION_DENIED when deploying", fix: "The deploying identity lacks roles such as run.admin and iam.serviceAccountUser on the runtime service account."}
+    - {problem: "API not enabled", fix: "Enable the service API (gcloud services enable run.googleapis.com) or with google_project_service in Terraform."}
+    - {problem: "Pod on GKE cannot reach a GCP API", fix: "Check Workload Identity: the Kubernetes service account annotation and the IAM binding to the GCP service account."}
+  mini_project:
+    title: Multi-cloud Terraform module (AWS, Azure and GCP)
+    brief: >-
+      Extend your multi-cloud infrastructure project with a GCP environment: VPC, a GKE Autopilot cluster or Cloud
+      Run service, and Artifact Registry, provisioned by the same pipeline.
+    steps:
+      - Add a gcp/ Terraform root using the google provider.
+      - Deploy one service and document the cost and how to destroy it.
+      - Add a CI job that runs terraform plan for GCP on pull requests.
+    evidence: >-
+      The GitHub analyser detects the google provider and GCP resources in .tf files as high-strength GCP evidence.
+  resources:
+    - {title: "Google Cloud for AWS professionals", url: "https://cloud.google.com/docs/get-started/aws-azure-gcp-service-comparison"}
+    - {title: "Cloud Run documentation", url: "https://cloud.google.com/run/docs"}
+    - {title: "Terraform google provider", url: "https://registry.terraform.io/providers/hashicorp/google/latest/docs"}
+  concept_map:
+    concept: GCP
+    components: [Projects and IAM, VPC and subnets, Compute Engine, GKE, Cloud Run, Cloud Storage, Cloud SQL, Cloud Monitoring]
+    interactions:
+      - {label: "Service accounts", children: ["attached to VMs and Cloud Run", "Workload Identity for GKE pods"]}
+      - {label: "Global VPC", children: ["regional subnets", "firewall rules by tag or service account"]}
+    production_use: ["Cloud Run for APIs", "GKE for platforms", "BigQuery for analytics"]
+    devops_use: ["Terraform google provider", "Artifact Registry", "Workload Identity Federation for CI"]
+    interview_traps: ["Downloading service-account keys", "Assuming VPCs are regional", "Forgetting to enable APIs"]
+    commands: ["gcloud run deploy", "gcloud container clusters get-credentials"]
+    troubleshooting: ["PERMISSION_DENIED", "API not enabled", "Workload Identity binding"]
+    related: [AWS, Azure, Kubernetes, Terraform]
+
+- key: platform_engineering
+  title: Platform engineering
+  why: >-
+    Platform roles are among your target families. Your CV mentions platform work, but there is no project framed
+    as an internal platform yet.
+  explanation: >-
+    Platform engineering builds an internal developer platform: paved roads that let product teams ship without
+    becoming infrastructure experts. Instead of every team writing its own Terraform, pipelines and Kubernetes
+    YAML, the platform team offers self-service templates (for example "new service" creates a repository, CI/CD,
+    monitoring and a namespace), golden paths with sensible defaults, and guardrails (policies, cost limits). The
+    platform is treated as a product with users (developers), feedback and documentation. Tools often include
+    Backstage for a developer portal, Terraform modules, Argo CD for GitOps and policy engines like Kyverno.
+  cheatsheet:
+    - "Goal: reduce developers' cognitive load; measure with lead time, deployment frequency and onboarding time."
+    - "Golden path = the easy, supported way that is also secure and observable by default."
+    - "Self-service > tickets. Guardrails > gates."
+    - "Treat the platform as a product: users, roadmap, docs, feedback."
+    - "Common stack: Backstage, Terraform modules, Argo CD, Kyverno/OPA, Crossplane."
+  commands:
+    - {cmd: "npx @backstage/create-app@latest", what: "scaffold a Backstage developer portal"}
+    - {cmd: "kubectl apply -f platform/namespace-template.yaml", what: "apply a standard namespace with quotas and policies"}
+    - {cmd: "argocd app create --file apps/service.yaml", what: "register a service with GitOps"}
+  lab:
+    goal: Build a "new service" golden path.
+    steps:
+      - Create a template repository with a Dockerfile, CI workflow, Helm chart and default dashboards.
+      - Add a Kustomize or Helm base that gives every service a namespace, resource quota and network policy.
+      - Add Kyverno policies enforcing non-root containers and resource limits.
+      - Register new services with Argo CD from the template.
+      - Document the path in a short README with a diagram.
+    done_when: A new service can be created from the template and reaches the cluster through GitOps in minutes.
+  troubleshooting:
+    - {problem: "Teams bypass the platform", fix: "The golden path is harder than doing it by hand; talk to users, remove steps, add defaults."}
+    - {problem: "Policies block deployments with unclear errors", fix: "Start policies in audit mode and write messages that say how to fix the manifest."}
+  mini_project:
+    title: Mini internal developer platform
+    brief: >-
+      A repository that provides a service template, reusable Terraform modules, Kyverno guardrails and Argo CD
+      application definitions, with a short "how to ship a service in 10 minutes" guide.
+    steps:
+      - templates/service (Dockerfile, CI, Helm chart).
+      - policies/ (Kyverno), apps/ (Argo CD Applications), modules/ (Terraform).
+      - docs/golden-path.md with a diagram.
+    evidence: >-
+      The GitHub analyser detects the Helm chart, Kyverno policies, Argo CD Applications and Terraform modules;
+      describe the repository as a platform in its README and CV entry.
+  resources:
+    - {title: "CNCF platforms white paper", url: "https://tag-app-delivery.cncf.io/whitepapers/platforms/"}
+    - {title: "Backstage documentation", url: "https://backstage.io/docs/overview/what-is-backstage"}
+  concept_map:
+    concept: Platform engineering
+    components: [Developer portal, Golden paths, Self-service templates, Guardrails, Platform as a product]
+    interactions:
+      - {label: "Template creates", children: [repository, CI/CD, namespace, dashboards]}
+      - {label: "Guardrails", children: ["admission policies", "quotas and cost limits"]}
+    production_use: ["Faster onboarding", "Consistent security", "Fewer tickets"]
+    devops_use: [Backstage, Terraform modules, Argo CD, Kyverno]
+    interview_traps: ["Platform as a gatekeeping team", "No user research", "Building everything from scratch"]
+    commands: ["npx @backstage/create-app@latest", "argocd app create"]
+    troubleshooting: ["Low adoption", "Opaque policy errors"]
+    related: [GitOps, Kubernetes, DevOps, SRE]
+
+- key: gitops
+  title: GitOps with Argo CD
+  why: >-
+    GitOps is listed on your CV only at exposure level. Argo CD is common in platform and DevOps roles, and it is
+    quick to prove with a public repository.
+  explanation: >-
+    In GitOps, Git holds the desired state of your clusters. A controller such as Argo CD runs inside the cluster,
+    watches the repository, and continuously reconciles: it applies changes when Git changes and reports or reverts
+    drift when someone changes the cluster by hand. Deployments become pull requests, rollbacks become git reverts,
+    and CI no longer needs cluster credentials. Common patterns are an app-of-apps (one Application that creates the
+    others), ApplicationSets for many clusters or environments, and separate config repositories per environment.
+  cheatsheet:
+    - "Argo CD Application = source (repo, path, revision) + destination (cluster, namespace) + sync policy."
+    - "syncPolicy.automated with prune and selfHeal = full GitOps; manual sync = review before apply."
+    - "Drift = live state differs from Git; selfHeal reverts it."
+    - "App-of-apps and ApplicationSet scale to many services and clusters."
+    - "Secrets: Sealed Secrets, SOPS, or External Secrets Operator; never plain Secrets in Git."
+  commands:
+    - {cmd: "kubectl create namespace argocd && kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml", what: "install Argo CD"}
+    - {cmd: "argocd app create web --repo URL --path k8s --dest-server https://kubernetes.default.svc --dest-namespace web", what: "create an app"}
+    - {cmd: "argocd app sync web", what: "sync now"}
+    - {cmd: "argocd app diff web", what: "see drift between Git and the cluster"}
+    - {cmd: "argocd app history web && argocd app rollback web 2", what: "roll back to an earlier revision"}
+  lab:
+    goal: Deploy an application to a local cluster with Argo CD and prove drift correction.
+    steps:
+      - Start kind or minikube and install Argo CD.
+      - Put Kubernetes manifests (or a Helm chart) for your app in a Git repository.
+      - Create an Argo CD Application with automated sync, prune and selfHeal.
+      - Change the replica count in Git and watch it sync; then scale by hand with kubectl and watch it revert.
+      - Add a second environment with Kustomize overlays and an ApplicationSet.
+    done_when: Changes reach the cluster only through Git, and manual changes are reverted automatically.
+  troubleshooting:
+    - {problem: "App stuck OutOfSync", fix: "Run argocd app diff; common causes are fields changed by controllers (add ignoreDifferences) or a failing hook."}
+    - {problem: "ComparisonError", fix: "The path, revision or Helm values are wrong, or the repository needs credentials."}
+    - {problem: "Sync fails with permission errors", fix: "The Argo CD project does not allow that destination namespace or resource kind."}
+  mini_project:
+    title: GitOps repository for your Kubernetes projects
+    brief: >-
+      A gitops/ repository (or folder) with Argo CD Application manifests for two of your services, Kustomize
+      overlays for dev and prod, and Sealed Secrets or External Secrets for credentials.
+    steps:
+      - apps/ with Argo CD Application or ApplicationSet YAML.
+      - overlays/dev and overlays/prod with kustomization.yaml.
+      - README with a screenshot of the Argo CD UI.
+    evidence: >-
+      The GitHub analyser detects Argo CD resources (argoproj.io) and Kustomize, and Argo CD implies GitOps.
+  resources:
+    - {title: "Argo CD documentation", url: "https://argo-cd.readthedocs.io/en/stable/"}
+    - {title: "OpenGitOps principles", url: "https://opengitops.dev/"}
+  concept_map:
+    concept: GitOps
+    components: [Git as source of truth, Reconciliation controller, Sync policy, Drift detection]
+    interactions:
+      - {label: "Pull-based deploy", children: ["controller pulls from Git", "no cluster credentials in CI"]}
+      - {label: "Rollback", children: ["git revert", "argocd app rollback"]}
+    production_use: ["Multi-cluster delivery", "Audit trail of every change"]
+    devops_use: [Argo CD, Flux, Kustomize overlays, ApplicationSets]
+    interview_traps: ["Secrets in Git", "Calling GitOps just YAML in a repo"]
+    commands: ["argocd app sync", "argocd app diff", "argocd app rollback"]
+    troubleshooting: ["OutOfSync", "ComparisonError", "Project permissions"]
+    related: [Kubernetes, Helm, CI/CD, Platform engineering]

@@ -18,8 +18,8 @@ The design is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 | 6 | Dashboard | ✅ done |
 | 7 | Application Engine (assisted apply) | ✅ done |
 | 8 | Interview Coach | ✅ done |
-| 9 | Skill Gap + Concept Maps | next |
-| 10 | Scheduler + Notifications | |
+| 9 | Skill Gap + Concept Maps | ✅ done |
+| 10 | Scheduler + Notifications | next |
 | 11 | Observability + Security hardening | |
 | 12 | Testing + Deployment | |
 
@@ -99,6 +99,13 @@ The design is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 - **Progress**: averages by section, a 30-day trend, and the questions to practise again.
 - Migration `0003` adds question-bank identity, key points, spoken answers and the rubric breakdown.
 
+### What Milestone 9 contains
+- **Skill-gap analysis** (`agents/skill_agent/gaps.py`) over the jobs in your target roles that are open to you, for 1, 7 or 30 days: how often each skill is asked for (required counts 1, preferred 0.5), the 7-day trend, your status (have / partial / missing, with the reason) and a priority = 40% frequency + 25% role importance + 20% gap severity + 15% interview importance. Daily reports are saved in `skill_gaps`.
+- **Learning guides** (`data/learning/*.yaml`, validated) for your top gaps: SRE, GCP, platform engineering, GitOps, LLMs, vector databases, agentic AI, Datadog, Java and PowerShell. Each has why it matters to you, an explanation, a cheat sheet, commands (checked against an allowlist of real tools), a hands-on lab, troubleshooting, official https resources, and a mini-project that states which GitHub evidence it produces.
+- **Concept maps** (concept → components → interactions → production use → DevOps use → interview traps → commands → troubleshooting → related), validated for depth ≤ 5 and ≤ 80 nodes, rendered as an interactive tree, a Mermaid mind map and Markdown, and versioned in `concept_maps`.
+- **Learning plan**: six checklist items per skill. **Completing items never changes a skill level**; only evidence does (the CV, or code the GitHub analyser finds).
+- **New GitHub detectors**, so learning turns into evidence: Java (sources, pom.xml, Gradle), PowerShell scripts, Datadog (ddtrace, agent config), SLO specs (Sloth, OpenSLO, SLO recording rules, which also imply SRE), vector stores (Chroma, FAISS, Pinecone, Qdrant, Weaviate, pgvector), RAG (a vector store plus retrieval code) and agents (LangGraph StateGraph, tool definitions, CrewAI, AutoGen, MCP).
+
 ## API (so far)
 
 | Method | Path | Role |
@@ -126,6 +133,8 @@ The design is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 | POST | `/api/v1/profile/facts/verify-bulk` | owner |
 | GET | `/api/v1/interview/packs/{date or today}` · `/interview/sessions` · `/sessions/{id}` · `/interview/stats` | any |
 | POST | `/api/v1/interview/packs/today/regenerate` · `/interview/sessions` · `/sessions/{id}/answer` · `/sessions/{id}/end` | owner |
+| GET | `/api/v1/skills/gaps?window=1\|7\|30` · `/api/v1/learning` · `/api/v1/learning/skills/{key}` | any |
+| POST/PATCH | `/api/v1/learning/plan` · `/api/v1/learning/items/{id}` | owner |
 | GET | `/api/v1/audit-logs` · `/api/v1/agent-runs` | owner |
 | GET | `/healthz` · `/readyz` · `/metrics` · `/docs` (dev only) | – |
 

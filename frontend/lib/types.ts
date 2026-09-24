@@ -302,3 +302,75 @@ export interface InterviewStats {
   weakest: { question: string; section: string; last_score: number }[];
   disclaimer: string;
 }
+
+export interface SkillGapRow {
+  skill: string;
+  name: string;
+  category: string;
+  jobs_requiring: number;
+  frequency_pct: number;
+  required_pct: number;
+  trend_7d: number | null;
+  in_qualifying_jobs: number;
+  have_level: string | null;
+  status: "have" | "partial" | "missing";
+  status_reason: string;
+  role_importance: number;
+  interview_importance: number;
+  priority: number;
+  families: string[];
+  guide: boolean;
+}
+
+export interface GapReport {
+  window_days: number;
+  jobs_analysed: number;
+  qualifying_jobs: number;
+  weights: Record<string, number>;
+  gaps: SkillGapRow[];
+}
+
+export interface LearningItemRow {
+  id: string;
+  skill: string;
+  kind: string;
+  title: string;
+  content_md: string;
+  status: "todo" | "in_progress" | "done";
+  completed_at: string | null;
+}
+
+export interface EvidenceStatus {
+  level: string | null;
+  resume: string | null;
+  github_repos: string[];
+  note: string;
+}
+
+export interface MapNode {
+  label: string;
+  children: MapNode[];
+}
+
+export interface SkillGuide {
+  guide: {
+    key: string;
+    title: string;
+    curated: boolean;
+    why: string;
+    explanation: string;
+    cheatsheet?: string[];
+    commands?: { cmd: string; what: string }[];
+    lab?: { goal: string; steps: string[]; done_when: string };
+    troubleshooting?: { problem: string; fix: string }[];
+    mini_project: { title: string; brief: string; steps: string[]; evidence: string };
+    resources: { title: string; url: string }[];
+  };
+  evidence: EvidenceStatus;
+  items: LearningItemRow[];
+  concept_map: { tree: MapNode; mermaid: string; markdown: string } | null;
+}
+
+export interface LearningPlan {
+  skills: { skill: string; name: string; done: number; total: number; items: LearningItemRow[]; evidence: EvidenceStatus }[];
+}

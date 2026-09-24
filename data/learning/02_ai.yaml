@@ -1,0 +1,186 @@
+# Learning guides for AI gaps. Schema: agents/skill_agent/learning.py
+- key: llm
+  title: Building with large language models (LLMs)
+  why: >-
+    LLM skills appear in AI engineer and cloud roles open to you, and there is no LLM code in your repositories yet.
+    Your MLOps and API experience transfers directly: an LLM feature is a service with latency, cost and quality to
+    manage.
+  explanation: >-
+    An LLM application sends a prompt (instructions plus context) to a model through an API and uses the response.
+    Good applications control the input (clear system prompt, relevant context, examples), constrain the output
+    (JSON schemas or tool calls), and never trust the output blindly. Retrieval-augmented generation (RAG) adds
+    your own documents: they are split into chunks, embedded, stored in a vector database, and the most relevant
+    chunks are retrieved into the prompt so answers are grounded and citable. In production you manage token cost,
+    latency (streaming, caching, smaller models), rate limits (retries with backoff, fallbacks), prompt injection
+    in untrusted input, and quality, measured with an evaluation set run on every prompt or model change.
+  cheatsheet:
+    - "Context window = the maximum tokens per request; cost and latency grow with tokens."
+    - "Temperature low for extraction and classification, higher for brainstorming."
+    - "Structured output: ask for JSON matching a schema and validate it."
+    - "RAG pipeline: chunk -> embed -> store -> retrieve (plus re-rank) -> generate with citations."
+    - "Fine-tune for style or format; use RAG for knowledge that changes."
+    - "Evaluate: a fixed set of questions with expected answers, checked on every change."
+    - "Treat retrieved and user text as data, never as instructions (prompt injection)."
+  commands:
+    - {cmd: "pip install anthropic openai chromadb", what: "SDKs and a local vector store"}
+    - {cmd: "python -m pytest tests/test_eval.py", what: "run your evaluation set in CI"}
+    - {cmd: "docker run -p 5432:5432 -e POSTGRES_PASSWORD=dev pgvector/pgvector:pg16", what: "PostgreSQL with pgvector"}
+  lab:
+    goal: Build a small RAG API over documents you own, with an evaluation set.
+    steps:
+      - Pick 20-50 documents (for example your own notes or public drug-interaction leaflets).
+      - Chunk them, create embeddings, and store them in pgvector or Chroma.
+      - Build a FastAPI endpoint that retrieves the top chunks and asks the model to answer only from them, citing the chunk IDs.
+      - Write 20 test questions with expected facts and a pytest evaluation that checks answers cite the right source.
+      - Add a Dockerfile, a GitHub Actions workflow and a README with cost and latency numbers you measured.
+    done_when: The evaluation passes in CI and each answer cites its sources.
+  troubleshooting:
+    - {problem: "Answers ignore the documents", fix: "Retrieval is returning the wrong chunks; check chunk size, embeddings and top-k, and log what was retrieved."}
+    - {problem: "Model invents facts", fix: "Tell it to answer only from the context and to say when the answer is not there; evaluate for it."}
+    - {problem: "429 rate-limit errors", fix: "Retry with exponential backoff and jitter, reduce concurrency, cache repeated calls."}
+  mini_project:
+    title: Grounded Q&A service with evaluation (health-domain or DevOps runbooks)
+    brief: >-
+      A containerised RAG service over a document set you are allowed to use, with a vector store, citations, an
+      evaluation suite in CI, Prometheus metrics for latency and token use, and a README explaining limits.
+    steps:
+      - app/ with retrieval and generation code; tests/ with the evaluation set.
+      - Dockerfile, docker-compose.yml with pgvector, and a CI workflow.
+      - Metrics for latency and tokens exposed to Prometheus.
+    evidence: >-
+      The GitHub analyser detects LLM SDK imports (llm), the vector store (vector database or pgvector) and
+      retrieval code (RAG), plus Docker, CI and Prometheus.
+  resources:
+    - {title: "Anthropic documentation", url: "https://docs.anthropic.com/"}
+    - {title: "pgvector", url: "https://github.com/pgvector/pgvector"}
+    - {title: "OWASP Top 10 for LLM applications", url: "https://owasp.org/www-project-top-10-for-large-language-model-applications/"}
+  concept_map:
+    concept: LLM applications
+    components: [Prompts, Context window, Structured output, Embeddings, Vector store, Evaluation]
+    interactions:
+      - {label: "RAG", children: [chunking, embedding, retrieval, re-ranking, "generation with citations"]}
+      - {label: "Guardrails", children: ["schema validation", "no tools for untrusted text", "PII kept out"]}
+    production_use: ["Support assistants", "Document Q&A", "Classification and extraction"]
+    devops_use: ["Latency and token metrics", "Retries and fallbacks", "Evaluation in CI", "Caching"]
+    interview_traps: ["Saying RAG retrains the model", "Trusting output as input to other systems", "No evaluation"]
+    commands: ["pip install anthropic", "pytest tests/test_eval.py"]
+    troubleshooting: ["Wrong chunks retrieved", "Hallucination", "Rate limits"]
+    related: [RAG, Vector databases, Agentic AI, MLOps]
+
+- key: vector_database
+  title: Vector databases
+  why: >-
+    Vector databases come up in AI roles open to you, and they are the storage layer behind RAG. You already run
+    PostgreSQL, so pgvector is the fastest way to prove it.
+  explanation: >-
+    A vector database stores embeddings (lists of numbers that capture meaning) and finds the nearest ones to a
+    query embedding. Distance is usually cosine similarity or inner product. Exact search compares against every
+    vector, which is slow at scale, so indexes such as HNSW or IVF give approximate nearest-neighbour search: much
+    faster for a small loss in recall. You can use a dedicated engine (Pinecone, Qdrant, Weaviate, Chroma) or an
+    extension such as pgvector, which keeps vectors next to your relational data and filters.
+  cheatsheet:
+    - "Embedding dimension must match the model (for example 768 or 1024)."
+    - "Cosine distance for normalised text embeddings; store the model name with each vector."
+    - "HNSW: fast, memory-hungry, good recall. IVF: needs training, cheaper."
+    - "Filter by metadata (tenant, document type) together with similarity."
+    - "Re-embed everything when you change the embedding model."
+  commands:
+    - {cmd: "CREATE EXTENSION vector;", what: "enable pgvector"}
+    - {cmd: "CREATE TABLE chunks (id bigserial PRIMARY KEY, body text, embedding vector(1024));", what: "vector column"}
+    - {cmd: "CREATE INDEX ON chunks USING hnsw (embedding vector_cosine_ops);", what: "HNSW index"}
+    - {cmd: "SELECT id, body FROM chunks ORDER BY embedding <=> $1 LIMIT 5;", what: "nearest neighbours by cosine distance"}
+  lab:
+    goal: Measure recall and latency of exact vs HNSW search in pgvector.
+    steps:
+      - Load 10,000 chunks with embeddings into PostgreSQL with pgvector.
+      - Query 50 questions with exact search and record the true top-5.
+      - Create an HNSW index and repeat; compute recall@5 and latency.
+      - Change ef_search and see the trade-off.
+    done_when: You can explain the recall and latency trade-off with your own numbers.
+  troubleshooting:
+    - {problem: "Index not used", fix: "The ORDER BY operator must match the index operator class (<=> with vector_cosine_ops)."}
+    - {problem: "Poor results", fix: "Embedding model mismatch between indexing and query, or chunks too long."}
+  mini_project:
+    title: pgvector-backed semantic search
+    brief: A small API with semantic search over your documents, with the recall and latency benchmark in the README.
+    steps:
+      - "docker-compose.yml with pgvector, migration SQL, a Python ingest script and a FastAPI search endpoint."
+    evidence: >-
+      The GitHub analyser detects pgvector and vector-store imports, and RAG when retrieval feeds generation.
+  resources:
+    - {title: "pgvector README", url: "https://github.com/pgvector/pgvector"}
+    - {title: "HNSW explained (Pinecone learn)", url: "https://www.pinecone.io/learn/series/faiss/hnsw/"}
+  concept_map:
+    concept: Vector databases
+    components: [Embeddings, Distance metrics, ANN indexes, Metadata filters]
+    interactions:
+      - {label: "Index types", children: [HNSW, IVF, "flat (exact)"]}
+      - {label: "Search", children: ["top-k", "filters", "re-ranking"]}
+    production_use: ["RAG retrieval", "Semantic search", "Deduplication"]
+    devops_use: ["Index build time and memory", "Backups", "Re-embedding migrations"]
+    interview_traps: ["Mixing embedding models", "Ignoring recall when tuning speed"]
+    commands: ["CREATE INDEX ... USING hnsw (embedding vector_cosine_ops)", "SELECT id FROM chunks ORDER BY embedding <=> query LIMIT 5"]
+    troubleshooting: ["Index not used", "Low recall"]
+    related: [RAG, LLM applications, PostgreSQL]
+
+- key: agentic_ai
+  title: Agentic AI
+  why: >-
+    Agentic AI appears in about one in six jobs open to you. It is where your DevOps skills stand out: agents need
+    tools, permissions, observability and safe automation, exactly like auto-remediation.
+  explanation: >-
+    An agent is an LLM in a loop: it receives a goal, decides which tool to call (an API, a shell command, a search),
+    reads the result, and repeats until done. Frameworks such as LangGraph model this as a graph of steps with state;
+    the Model Context Protocol (MCP) standardises how tools and data sources are exposed to models. The engineering
+    challenges are reliability (limits on steps and cost, retries, clear stopping conditions), safety (least
+    privilege for tools, human approval for risky actions, treating tool output as untrusted), and observability
+    (tracing every step, tool call and token). An AIOps agent that proposes a fix and waits for approval is a good
+    example.
+  cheatsheet:
+    - "Agent = model + tools + loop + memory/state + stopping condition."
+    - "Give each tool a narrow schema and the least privilege it needs."
+    - "Human-in-the-loop approval for anything destructive."
+    - "Cap steps, time and cost per run; log every tool call."
+    - "Tool results and fetched pages are data, not instructions (prompt injection)."
+    - "Evaluate on scenarios with expected outcomes, not only single answers."
+  commands:
+    - {cmd: "pip install langgraph anthropic", what: "graph-based agent framework and SDK"}
+    - {cmd: "npx @modelcontextprotocol/inspector", what: "inspect and test an MCP server"}
+  lab:
+    goal: Build an incident-triage agent that suggests (not applies) a fix.
+    steps:
+      - Give it read-only tools - query Prometheus, read recent pod logs, list recent deploys.
+      - Implement the loop with LangGraph with a step limit and a trace of every tool call.
+      - Have it output a structured diagnosis and a proposed action that requires your approval.
+      - Test it on three injected failures in a local cluster (crash loop, bad config, high latency).
+    done_when: It diagnoses at least two of the three injected failures and never runs a write action on its own.
+  troubleshooting:
+    - {problem: "Agent loops forever", fix: "Add a step limit and a clear success condition; detect repeated identical tool calls."}
+    - {problem: "Agent calls the wrong tool", fix: "Improve tool names and descriptions, reduce the number of tools, add examples."}
+  mini_project:
+    title: Human-approved AIOps triage agent
+    brief: >-
+      Extend one of your AIOps projects with an agent that investigates alerts using read-only tools and proposes a
+      remediation that a human approves, with full step tracing.
+    steps:
+      - agent/ with a LangGraph StateGraph and tool definitions; tests/ with scenario evaluations.
+      - A README with an architecture diagram and the safety design (permissions, approval, limits).
+    evidence: >-
+      The GitHub analyser detects LangGraph and agent code (a StateGraph or tool definitions) as Agentic AI evidence,
+      plus LLM SDK imports.
+  resources:
+    - {title: "LangGraph documentation", url: "https://langchain-ai.github.io/langgraph/"}
+    - {title: "Model Context Protocol", url: "https://modelcontextprotocol.io/"}
+    - {title: "Building effective agents (Anthropic)", url: "https://www.anthropic.com/engineering/building-effective-agents"}
+  concept_map:
+    concept: Agentic AI
+    components: [Model, Tools, Loop and state, Memory, Stopping conditions, Guardrails]
+    interactions:
+      - {label: "Tool calling", children: ["JSON schema per tool", "results fed back to the model"]}
+      - {label: "Safety", children: ["least privilege", "human approval", "step and cost limits"]}
+    production_use: ["Incident triage", "Support automation", "Code assistants"]
+    devops_use: ["Tracing every step", "Permissions per tool", "Evaluation scenarios in CI"]
+    interview_traps: ["Letting agents run destructive actions unattended", "No limits", "Trusting tool output"]
+    commands: ["pip install langgraph", "npx @modelcontextprotocol/inspector"]
+    troubleshooting: ["Infinite loops", "Wrong tool choice"]
+    related: [LLM applications, AIOps, Auto-remediation, MCP]

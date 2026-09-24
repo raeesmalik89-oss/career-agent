@@ -141,3 +141,49 @@ def test_username_validation():
     for bad in ("../etc", "a b", "-leading", "x" * 40, ""):
         with pytest.raises(GitHubError):
             validate_username(bad)
+
+
+def _skills(path: str, text: str) -> dict[str, str]:
+    return {e.skill: e.strength for e in detect_file(path, text)}
+
+
+RAG_PY = """import chromadb
+from openai import OpenAI
+
+client = chromadb.Client()
+docs = client.get_collection("notes")
+
+
+def answer(question: str) -> str:
+    hits = docs.query(query_texts=[question], n_results=3)  # retrieve context for generation
+    context = "\n".join(hits["documents"][0])
+    return OpenAI().chat.completions.create(model="x", messages=[{"role": "user", "content": context}])
+"""
+
+AGENT_PY = """from langgraph.graph import StateGraph
+
+graph = StateGraph(dict)
+graph.add_node("plan", lambda s: s)
+"""
+
+
+@pytest.mark.parametrize(
+    "path, text, expected",
+    [
+        ("rag/app.py", RAG_PY, {"vector_database", "llm", "rag"}),
+        ("agent/graph.py", AGENT_PY, {"langgraph", "agentic_ai"}),
+        ("scripts/deploy.ps1", "param($Env)\n" * 12, {"powershell"}),
+        ("src/main/java/App.java", "public class App {}\n" * 25, {"java"}),
+        ("pom.xml", "<project></project>", {"java"}),
+        ("slo/api.yaml", "apiVersion: sloth.slok.dev/v1\nkind: PrometheusServiceLevel\n", {"slo"}),
+        ("rules/slo.yml", "groups:\n- name: slo\n  rules:\n  - record: slo:error_budget:ratio\n    expr: 1\n", {"slo"}),
+        ("app/trace.py", "from ddtrace import tracer\n" + "x = 1\n" * 12, {"datadog"}),
+    ],
+)
+def test_gap_skill_detectors(path, text, expected):
+    got = _skills(path, text)
+    assert expected <= set(got), got
+
+
+def test_vector_store_without_retrieval_is_not_rag():
+    assert "rag" not in _skills("db.py", "import faiss\nindex = faiss.IndexFlatL2(8)\n")

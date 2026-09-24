@@ -1,0 +1,169 @@
+# Learning guides for tools and languages. Schema: agents/skill_agent/learning.py
+- key: datadog
+  title: Datadog
+  why: >-
+    Datadog appears in several roles open to you. You know Prometheus and Grafana, and Datadog is the same ideas as
+    a commercial SaaS product, so interviews focus on how you would use its agent, tags and monitors.
+  explanation: >-
+    Datadog is a hosted observability platform. An agent runs on each host or as a DaemonSet in Kubernetes and
+    collects metrics, logs and traces; applications send traces through tracing libraries (ddtrace for Python).
+    Everything is tagged (env, service, version, team), and unified service tagging links metrics, logs and traces
+    for one service. Monitors alert on metrics, logs, APM or SLOs and route to Slack or PagerDuty. Costs grow with
+    hosts, custom metrics, log volume and indexed spans, so tagging discipline and log filtering matter.
+  cheatsheet:
+    - "Unified service tagging: env, service, version on every signal."
+    - "Agent in Kubernetes: Helm chart or Datadog Operator, DaemonSet plus cluster agent."
+    - "APM: ddtrace-run python app.py or instrument with the library."
+    - "Monitors: metric, log, APM, composite, SLO; use warn and alert thresholds and a runbook link."
+    - "Control cost: exclude noisy logs, limit custom-metric tag cardinality."
+    - "Prometheus mapping: Datadog can scrape OpenMetrics endpoints."
+  commands:
+    - {cmd: "helm install datadog datadog/datadog --set datadog.apiKeyExistingSecret=datadog-secret", what: "install the agent on Kubernetes with the key in a Secret"}
+    - {cmd: "ddtrace-run uvicorn app:app", what: "run a Python API with APM tracing"}
+    - {cmd: "datadog-agent status", what: "check the agent on a host"}
+  lab:
+    goal: Monitor a service end to end with the Datadog free trial (or document the design without an account).
+    steps:
+      - Install the agent in a local Kubernetes cluster with Helm, keeping the API key in a Secret.
+      - Instrument a FastAPI service with ddtrace and unified service tags.
+      - Send structured logs with the trace ID so logs and traces link.
+      - Create a latency monitor and an SLO, with a runbook link in the message.
+    done_when: A request can be followed from the trace to its logs, and the monitor fires on injected latency.
+  troubleshooting:
+    - {problem: "No traces", fix: "The app cannot reach the agent on port 8126; set DD_AGENT_HOST (the node IP in Kubernetes)."}
+    - {problem: "Bill jumped", fix: "High-cardinality custom-metric tags or unfiltered debug logs; add exclusion filters."}
+  mini_project:
+    title: Datadog-ready observability for one project
+    brief: >-
+      Add ddtrace instrumentation, unified service tags, a Helm values file for the agent and exported monitor
+      definitions (JSON or Terraform datadog provider) to one of your services.
+    steps:
+      - ddtrace in the app, Helm values for the agent, monitors as code.
+    evidence: >-
+      The GitHub analyser detects ddtrace imports and Datadog agent configuration as Datadog evidence.
+  resources:
+    - {title: "Datadog documentation", url: "https://docs.datadoghq.com/"}
+    - {title: "Unified service tagging", url: "https://docs.datadoghq.com/getting_started/tagging/unified_service_tagging/"}
+  concept_map:
+    concept: Datadog
+    components: [Agent, APM tracing, Logs, Metrics, Monitors, SLOs]
+    interactions:
+      - {label: "Unified service tagging", children: [env, service, version]}
+      - {label: "Kubernetes", children: [DaemonSet agent, cluster agent]}
+    production_use: ["APM for microservices", "SLO monitors", "Log analytics"]
+    devops_use: ["Monitors as code (Terraform)", "Helm install", "Cost control"]
+    interview_traps: ["High-cardinality tags", "API keys in manifests"]
+    commands: ["helm install datadog datadog/datadog", "ddtrace-run"]
+    troubleshooting: ["No traces", "Cost spikes"]
+    related: [Prometheus, Grafana, Observability, OpenTelemetry]
+
+- key: java
+  title: Java for DevOps engineers
+  why: >-
+    Java appears in several roles open to you, usually because the applications you would build pipelines for are
+    Java or Spring Boot. You need to build, containerise and run Java apps well, not be a Java developer.
+  explanation: >-
+    Java code compiles to bytecode that runs on the JVM. Builds use Maven (pom.xml) or Gradle (build.gradle), which
+    resolve dependencies and produce a JAR; Spring Boot apps are self-contained JARs with an embedded web server.
+    For DevOps the key topics are fast, cached builds in CI, small container images (multi-stage builds with a JRE
+    or a distroless Java base), memory settings in containers (the JVM respects container limits; set
+    -XX:MaxRAMPercentage), health endpoints (Spring Boot Actuator) and JVM metrics for Prometheus (Micrometer).
+  cheatsheet:
+    - "mvn -B verify / gradle build: compile, test, package."
+    - "Cache ~/.m2 or ~/.gradle in CI."
+    - "Multi-stage Dockerfile: build with a JDK image, run with a JRE or distroless image."
+    - "-XX:MaxRAMPercentage=75 so the heap fits the container memory limit."
+    - "Spring Boot Actuator: /actuator/health for probes, /actuator/prometheus for metrics."
+    - "Thread dumps (jstack) and heap dumps (jmap) for troubleshooting."
+  commands:
+    - {cmd: "mvn -B -ntp verify", what: "build and test in CI"}
+    - {cmd: "java -XX:MaxRAMPercentage=75 -jar app.jar", what: "run with container-aware heap"}
+    - {cmd: "jcmd 1 Thread.print", what: "thread dump of PID 1 in a container"}
+  lab:
+    goal: Containerise and deploy a Spring Boot app with proper health checks and metrics.
+    steps:
+      - Generate a Spring Boot app with Actuator and Micrometer Prometheus.
+      - Write a multi-stage Dockerfile and a GitHub Actions workflow with Maven caching.
+      - Deploy to Kubernetes with readiness and liveness probes on Actuator endpoints and a memory limit.
+      - Scrape metrics with Prometheus and graph JVM heap and GC time in Grafana.
+    done_when: The app deploys through CI, probes pass, and JVM metrics appear in Grafana.
+  troubleshooting:
+    - {problem: "Pod OOMKilled although heap looks small", fix: "Non-heap memory (metaspace, threads, buffers) also counts; lower MaxRAMPercentage or raise the limit."}
+    - {problem: "Slow CI builds", fix: "Cache the Maven repository and use mvn -o where possible."}
+  mini_project:
+    title: Spring Boot service with a full CI/CD and observability setup
+    brief: A small Java API with Maven, a multi-stage Dockerfile, Kubernetes manifests with probes, and JVM dashboards.
+    steps:
+      - src/ (Java), pom.xml, Dockerfile, k8s/, .github/workflows/ci.yml, grafana dashboard JSON.
+    evidence: The GitHub analyser detects .java sources and pom.xml as Java evidence, plus Docker, Kubernetes and CI.
+  resources:
+    - {title: "dev.java learning path", url: "https://dev.java/learn/"}
+    - {title: "Spring Boot Actuator", url: "https://docs.spring.io/spring-boot/reference/actuator/index.html"}
+  concept_map:
+    concept: Java for DevOps
+    components: [JVM, Maven or Gradle, Spring Boot, Actuator, Micrometer]
+    interactions:
+      - {label: "Containers", children: ["multi-stage builds", "MaxRAMPercentage", "distroless JRE"]}
+      - {label: "Kubernetes", children: ["Actuator probes", "Prometheus metrics"]}
+    production_use: ["Spring Boot microservices", "Enterprise APIs"]
+    devops_use: ["CI caching", "JVM tuning", "Thread and heap dumps"]
+    interview_traps: ["Heap equal to container limit", "No health endpoints"]
+    commands: ["mvn -B verify", "jcmd 1 Thread.print"]
+    troubleshooting: ["OOMKilled JVM", "Slow builds"]
+    related: [Docker, Kubernetes, CI/CD, Prometheus]
+
+- key: powershell
+  title: PowerShell for cloud automation
+  why: >-
+    PowerShell appears in Azure-heavy roles open to you. You already know Bash and Azure, and PowerShell is the
+    standard automation language for Windows and many Azure teams.
+  explanation: >-
+    PowerShell passes objects, not text, through the pipeline, so you filter and select properties instead of
+    parsing strings. Commands are Verb-Noun cmdlets (Get-Process, Set-Item). PowerShell 7 runs on Linux, macOS and
+    Windows. The Az module manages Azure (Connect-AzAccount, Get-AzVM, New-AzResourceGroup). Good scripts use
+    parameters with validation, error handling (-ErrorAction Stop with try/catch), approved verbs and Pester tests,
+    and run in pipelines with a managed identity instead of stored passwords.
+  cheatsheet:
+    - "Get-Command, Get-Help and Get-Member to explore."
+    - "Pipeline passes objects: Get-Process | Where-Object CPU -gt 100 | Select-Object Name, CPU."
+    - "Errors: -ErrorAction Stop inside try { } catch { }."
+    - "Parameters: param([Parameter(Mandatory)][string]$Name)."
+    - "Az module: Connect-AzAccount -Identity in Azure-hosted automation."
+    - "Pester for tests; PSScriptAnalyzer for linting."
+  commands:
+    - {cmd: "Install-Module Az -Scope CurrentUser", what: "install the Azure module"}
+    - {cmd: "Get-AzVM | Where-Object { $_.PowerState -ne 'VM running' }", what: "find stopped VMs"}
+    - {cmd: "Invoke-Pester", what: "run PowerShell tests"}
+    - {cmd: "Invoke-ScriptAnalyzer -Path ./scripts", what: "lint scripts"}
+  lab:
+    goal: Automate an Azure clean-up task safely.
+    steps:
+      - Write a script that lists resources without the required tags in a resource group.
+      - Add a -WhatIf mode that reports what it would delete, and require an explicit switch to act.
+      - Add Pester tests with mocked Az cmdlets and run PSScriptAnalyzer.
+      - Run it from GitHub Actions with OIDC login to Azure.
+    done_when: The script reports untagged resources in CI without any stored secret.
+  troubleshooting:
+    - {problem: "Script continues after an error", fix: "Non-terminating errors; use -ErrorAction Stop or $ErrorActionPreference = 'Stop'."}
+    - {problem: "Works locally, fails in CI", fix: "Modules not installed or not logged in; install Az in the job and use azure/login with OIDC."}
+  mini_project:
+    title: Azure governance scripts with tests
+    brief: A repository of PowerShell scripts for tagging checks and cost clean-up, with Pester tests and a CI workflow.
+    steps:
+      - scripts/*.ps1, tests/*.Tests.ps1, .github/workflows/ci.yml.
+    evidence: The GitHub analyser detects .ps1 scripts as PowerShell evidence, plus the CI workflow.
+  resources:
+    - {title: "PowerShell documentation", url: "https://learn.microsoft.com/powershell/"}
+    - {title: "Az PowerShell module", url: "https://learn.microsoft.com/powershell/azure/"}
+  concept_map:
+    concept: PowerShell
+    components: [Cmdlets, Object pipeline, Modules, Error handling, Pester]
+    interactions:
+      - {label: "Azure", children: ["Az module", "managed identity login"]}
+      - {label: "Quality", children: [Pester, PSScriptAnalyzer]}
+    production_use: ["Azure automation", "Windows server management"]
+    devops_use: ["CI scripts", "Governance checks", "Runbooks"]
+    interview_traps: ["Parsing text instead of objects", "Stored credentials"]
+    commands: ["Get-AzVM", "Invoke-Pester"]
+    troubleshooting: ["Non-terminating errors", "Missing modules in CI"]
+    related: [Azure, Bash, CI/CD]

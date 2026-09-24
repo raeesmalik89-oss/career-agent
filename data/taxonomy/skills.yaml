@@ -133,7 +133,7 @@
 - {key: auto_remediation, name: Auto-Remediation, category: aiops, aliases: [auto-remediation, auto remediation, auto-healing, auto healing, self-healing, auto-heal]}
 - {key: incident_management, name: Incident Management, category: aiops, aliases: [incident response, on-call, incident alerting]}
 - {key: sre, name: SRE, category: aiops, aliases: [site reliability engineering, site reliability]}
-- {key: slo, name: SLOs / SLIs, category: aiops, aliases: [slo, slos, sli, slis, sla, slas, error budget, error budgets]}
+- {key: slo, name: SLOs / SLIs, category: aiops, aliases: [slo, slos, sli, slis, sla, slas, error budget, error budgets], implies: [sre]}
 - {key: chaos_engineering, name: Chaos Engineering, category: aiops}
 
 # ---------------- security ----------------

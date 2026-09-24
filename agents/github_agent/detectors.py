@@ -69,6 +69,19 @@ PY_IMPORTS: dict[str, tuple[str, ...]] = {
     "lightgbm": ("ensembles",),
     "requests": ("rest_api",),
     "hvac": ("hashicorp_vault",),
+    # vector stores and agent frameworks
+    "chromadb": ("vector_database",),
+    "faiss": ("vector_database",),
+    "pinecone": ("vector_database",),
+    "qdrant_client": ("vector_database",),
+    "weaviate": ("vector_database",),
+    "pgvector": ("pgvector",),
+    "llama_index": ("llm",),
+    "crewai": ("agentic_ai",),
+    "autogen": ("agentic_ai",),
+    "mcp": ("mcp",),
+    "ddtrace": ("datadog",),
+    "datadog": ("datadog",),
 }
 # requirements.txt / pyproject package name -> skill keys
 PY_PACKAGES = {
@@ -98,6 +111,7 @@ JS_PACKAGES = {
 # docker image name fragment -> skill keys
 IMAGES = {
     "prom/prometheus": ("prometheus",),
+    "datadog/agent": ("datadog",),
     "prometheus": ("prometheus",),
     "grafana": ("grafana",),
     "alertmanager": ("alertmanager",),
@@ -360,6 +374,11 @@ def detect_python(path: str, text: str) -> list[Evidence]:
         out.append(Evidence("rest_api", "code", path, "defines HTTP API routes", "high"))
     if re.search(r"\b(RandomForest|GradientBoosting|XGB|Bagging|AdaBoost)\w*\(", text):
         out.append(Evidence("ensembles", "code", path, "trains an ensemble model", "high"))
+    vector = {s for e in out for s in [e.skill] if s in ("vector_database", "pgvector")}
+    if vector and re.search(r"\b(embed(ding)?s?|similarity_search|as_retriever|retriev\w*)\b", text):
+        out.append(Evidence("rag", "code", path, "retrieves from a vector store for generation", "high"))
+    if re.search(r"\b(StateGraph|create_react_agent|AgentExecutor|@tool\b|tools\s*=\s*\[)", text):
+        out.append(Evidence("agentic_ai", "code", path, "defines an agent with tools", "high"))
     name = path.rsplit("/", 1)[-1]
     if name.startswith("test_") or name.endswith("_test.py") or "/tests/" in f"/{path}":
         out.append(Evidence("pytest", "test", path, "automated test file", "high"))
@@ -416,6 +435,20 @@ def detect_scripts_and_misc(path: str, text: str) -> list[Evidence]:
             return [Evidence(lang, "code", path, f"{n} lines", "high" if n >= 20 else "medium")]
     if low.endswith(".sql"):
         return [Evidence("sql", "code", path, f"{_lines(text)} lines", "medium")]
+    if low.endswith((".ps1", ".psm1")):
+        n = _lines(text)
+        return [Evidence("powershell", "code", path, f"{n} lines", "high" if n >= 10 else "medium")]
+    if low.endswith(".java"):
+        n = _lines(text)
+        return [Evidence("java", "code", path, f"{n} lines", "high" if n >= 20 else "medium")]
+    if name in ("pom.xml", "build.gradle", "build.gradle.kts"):
+        return [Evidence("java", "config", path, f"{name} build", "high")]
+    if name in ("datadog.yaml", "datadog.yml") or re.search(r"^\s*datadog:\s*$", text, re.M) and "apiKey" in text:
+        return [Evidence("datadog", "config", path, "Datadog agent configuration", "high")]
+    if re.search(r"^\s*(apiVersion:\s*(sloth\.slok\.dev|openslo)|slos:\s*$)", text, re.M | re.I):
+        return [Evidence("slo", "config", path, "SLO definition (Sloth / OpenSLO)", "high")]
+    if re.search(r"^\s*-?\s*record:\s*\S*(slo|sli|error_budget)\S*", text, re.M | re.I):
+        return [Evidence("slo", "config", path, "Prometheus SLO / error-budget recording rules", "high")]
     if low.endswith(".rego"):
         return [Evidence("opa", "config", path, "Rego policy", "high")]
     if name in ("prometheus.yml", "prometheus.yaml") or re.search(r"^\s*scrape_configs:", text, re.M):

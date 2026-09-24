@@ -7,7 +7,20 @@ from prometheus_client import CONTENT_TYPE_LATEST, Counter, Histogram, generate_
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from app.api.v1 import applications, auth, dashboard, github, interview, jobs, matches, ops, resume, settings, sources
+from app.api.v1 import (
+    applications,
+    auth,
+    dashboard,
+    github,
+    interview,
+    jobs,
+    matches,
+    ops,
+    resume,
+    settings,
+    skills,
+    sources,
+)
 from app.config import get_settings
 from app.db.session import get_db
 
@@ -59,6 +72,7 @@ def create_app() -> FastAPI:
         dashboard.router,
         applications.router,
         interview.router,
+        skills.router,
         ops.router,
     ):
         app.include_router(r, prefix="/api/v1")
