@@ -30,3 +30,9 @@ infra/observability/metrics_token
 # Server backups (deploy/docker-compose.prod.yml) and Grafana admin password
 backups/
 infra/observability/grafana_admin_password
+
+# coverage data (pytest --cov)
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
