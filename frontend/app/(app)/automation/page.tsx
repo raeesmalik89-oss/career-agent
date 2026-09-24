@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { useIsOwner } from "@/components/shell";
+import { useCanEdit, useIsAdmin } from "@/components/shell";
 import { SystemHealthCard } from "@/components/system-health";
 import { Badge, Button, Card, CardHeader, ErrorNote, Loading, PageHeader, cx } from "@/components/ui";
 import { ApiError, api } from "@/lib/api";
@@ -13,7 +13,8 @@ import { useApi } from "@/lib/use-api";
 const TRIGGER_LABEL = { schedule: "on schedule", catch_up: "caught up late", manual: "run by you" } as const;
 
 export default function AutomationPage() {
-  const owner = useIsOwner();
+  const owner = useCanEdit();
+  const admin = useIsAdmin();
   const info = useApi<PipelinesInfo>("/api/v1/pipelines");
   const runs = useApi<PipelineRunRow[]>("/api/v1/pipeline-runs?limit=40");
   const [err, setErr] = useState<ApiError | null>(null);
@@ -62,7 +63,7 @@ export default function AutomationPage() {
         }
       />
       <ErrorNote error={err} />
-      {owner && <SystemHealthCard />}
+      {admin && <SystemHealthCard />}
 
       <Card className="mb-6">
         <div className="flex flex-wrap items-center gap-3 px-4 py-3 text-sm">

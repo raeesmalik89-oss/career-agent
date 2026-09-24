@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Icon } from "@/components/icons";
-import { useIsOwner } from "@/components/shell";
+import { useCanEdit } from "@/components/shell";
 import { Badge, Button, Card, CardHeader, Empty, ErrorNote, PageHeader } from "@/components/ui";
 import { ApiError, api } from "@/lib/api";
 import type { AiReport, AiStatus } from "@/lib/types";
@@ -21,7 +21,7 @@ const input = "mt-1.5 h-10 w-full rounded-lg border border-border bg-surface px-
 const MIN = 100;
 
 export default function TailorPage() {
-  const owner = useIsOwner();
+  const owner = useCanEdit();
   const router = useRouter();
   const ai = useApi<AiStatus>(owner ? "/api/v1/ai/status" : null);
   const [title, setTitle] = useState("");

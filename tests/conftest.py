@@ -96,10 +96,12 @@ def db(engine):
 @pytest.fixture
 def client(db):
     from app.api.v1.auth import login_limiter
+    from app.api.v1.users import signup_limiter
     from app.deps import LIMITERS
     from app.main import app
 
     login_limiter.reset()
+    signup_limiter.reset()
     for limiter in LIMITERS.values():
         limiter.reset()
     app.dependency_overrides[get_db] = lambda: db
@@ -125,6 +127,11 @@ def make_user(db, role: Role = Role.owner, email: str | None = None) -> User:
 @pytest.fixture
 def owner(db) -> User:
     return make_user(db, Role.owner)
+
+
+@pytest.fixture
+def member(db) -> User:
+    return make_user(db, Role.member)
 
 
 @pytest.fixture

@@ -9,7 +9,7 @@ import { useApi } from "@/lib/use-api";
 import { Icon, type IconName, Logo } from "./icons";
 import { Loading, cx } from "./ui";
 
-const NAV: { group: string; items: { href: string; label: string; icon: IconName }[] }[] = [
+const NAV: { group: string; items: { href: string; label: string; icon: IconName; admin?: boolean }[] }[] = [
   { group: "", items: [{ href: "/", label: "Dashboard", icon: "home" }] },
   {
     group: "Job search",
@@ -40,6 +40,7 @@ const NAV: { group: string; items: { href: string; label: string; icon: IconName
       { href: "/automation", label: "Automation", icon: "zap" },
       { href: "/activity", label: "Activity", icon: "activity" },
       { href: "/settings", label: "Settings", icon: "settings" },
+      { href: "/users", label: "Users", icon: "users", admin: true },
     ],
   },
 ];
@@ -52,7 +53,14 @@ export function useMe(): Me {
   return me;
 }
 
-export function useIsOwner(): boolean {
+/** Can change their own data (CV, facts, applications, settings): the administrator and members. */
+export function useCanEdit(): boolean {
+  const r = useMe().role;
+  return r === "owner" || r === "member";
+}
+
+/** Functions that affect everyone: job sources, users and invites, system health and backups. */
+export function useIsAdmin(): boolean {
   return useMe().role === "owner";
 }
 
@@ -151,7 +159,7 @@ function Sidebar({ me, pathname, onNavigate, onLogout }: { me: Me; pathname: str
               <div className="px-3 pb-1.5 text-[11px] font-semibold uppercase tracking-wider text-sidebar-muted">{g.group}</div>
             )}
             <ul className="space-y-0.5">
-              {g.items.map((n) => {
+              {g.items.filter((n) => !n.admin || me.role === "owner").map((n) => {
                 const active = isActive(pathname, n.href);
                 return (
                   <li key={n.href}>
@@ -186,7 +194,7 @@ function Sidebar({ me, pathname, onNavigate, onLogout }: { me: Me; pathname: str
           <div className="min-w-0 flex-1">
             <div className="truncate text-sm font-medium text-white">{me.display_name}</div>
             <div className="truncate text-xs text-sidebar-muted" title={me.email}>
-              {me.role === "owner" ? me.email : `${me.role} · ${me.email}`}
+              {me.role === "owner" ? `Admin · ${me.email}` : me.role === "member" ? me.email : `${me.role} · ${me.email}`}
             </div>
           </div>
           <button

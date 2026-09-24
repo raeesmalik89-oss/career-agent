@@ -64,6 +64,9 @@ export const api = {
   post: <T>(path: string, json?: unknown) => apiFetch<T>(path, { method: "POST", json: json ?? {} }),
   put: <T>(path: string, json: unknown) => apiFetch<T>(path, { method: "PUT", json }),
   patch: <T>(path: string, json: unknown) => apiFetch<T>(path, { method: "PATCH", json }),
+  del: <T>(path: string) => apiFetch<T>(path, { method: "DELETE" }),
+  /** multipart upload: the browser sets the boundary, so no Content-Type header here */
+  upload: <T>(path: string, form: FormData) => apiFetch<T>(path, { method: "POST", body: form }),
 };
 
 export function qs(params: Record<string, string | number | boolean | null | undefined>): string {

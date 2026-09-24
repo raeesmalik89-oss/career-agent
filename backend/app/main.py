@@ -27,6 +27,7 @@ from app.api.v1 import (
     settings,
     skills,
     sources,
+    users,
 )
 from app.config import get_settings
 from app.core import checks
@@ -57,7 +58,7 @@ def create_app() -> FastAPI:
     max_body = s.max_request_mb * 1024 * 1024
     app = FastAPI(
         title="Career Agent API",
-        version="1.1.0",
+        version="1.2.0",
         docs_url="/docs" if s.app_env != "production" else None,
         redoc_url=None,
     )
@@ -131,6 +132,7 @@ def create_app() -> FastAPI:
         ops.router,
         automation.router,
         ai.router,
+        users.router,
     ):
         app.include_router(r, prefix="/api/v1")
 

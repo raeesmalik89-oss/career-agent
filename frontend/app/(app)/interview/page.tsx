@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { scoreClass } from "@/components/feedback";
-import { useIsOwner } from "@/components/shell";
+import { useCanEdit } from "@/components/shell";
 import { Badge, Button, Card, CardHeader, Empty, ErrorNote, Loading, PageHeader, cx } from "@/components/ui";
 import { ApiError, api } from "@/lib/api";
 import { fmtDateTime, humanize } from "@/lib/format";
@@ -57,7 +57,7 @@ export default function InterviewPage() {
 }
 
 function MockStart() {
-  const owner = useIsOwner();
+  const owner = useCanEdit();
   const router = useRouter();
   const sessions = useApi<{ id: string; mode: string; started_at: string; ended_at: string | null; avg_score: number | null; total: number }[]>(
     "/api/v1/interview/sessions?limit=10",
@@ -138,7 +138,7 @@ function MockStart() {
 }
 
 function PackView() {
-  const owner = useIsOwner();
+  const owner = useCanEdit();
   const pack = useApi<InterviewPack>("/api/v1/interview/packs/today");
   const [busy, setBusy] = useState(false);
   if (pack.loading && !pack.data) return <Loading label="Building today's pack…" />;

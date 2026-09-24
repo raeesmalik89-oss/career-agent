@@ -180,7 +180,11 @@ def tick(session_factory: Callable[[], Session], now: datetime | None = None) ->
     now = now or datetime.now(UTC)
     ran: list[dict] = []
     with session_factory() as db:
-        owners = db.scalars(select(User).where(User.role == Role.owner, User.is_active.is_(True))).all()
+        owners = db.scalars(
+            select(User)
+            .where(User.role.in_((Role.owner, Role.member)), User.is_active.is_(True))
+            .order_by(User.created_at)
+        ).all()
         for user in owners:
             settings, _ = settings_service.get_effective(db, user.id)
             for pipeline, fire, trigger in due(settings, now):

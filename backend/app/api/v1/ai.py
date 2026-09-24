@@ -12,7 +12,7 @@ from app.db.session import get_db
 from app.deps import RequestCtx, owner_only, rate_limit, request_ctx
 from app.services import audit
 from app.services.secrets import has_secret
-from integrations.llm import PROVIDERS, LLMError, chat_json
+from integrations.llm import PROVIDERS, LLMError, chat_json, list_models
 
 router = APIRouter(prefix="/ai", tags=["ai"])
 
@@ -49,7 +49,7 @@ def ai_test(
         raise HTTPException(status.HTTP_409_CONFLICT, "AI is turned off: choose a provider in Settings → AI and save")
     started = time.monotonic()
     try:
-        out, _ = chat_json(
+        out, usage = chat_json(
             provider, model=model, api_key=key, ollama_url=ollama_url, temperature=0,
             system='Reply with the JSON object {"ok": true} and nothing else.', user="ping",
         )  # fmt: skip
@@ -57,7 +57,24 @@ def ai_test(
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc)) from None
     seconds = round(time.monotonic() - started, 1)
     ok = out.get("ok") is True
+    note = None
+    if usage.get("model") and usage["model"] != model:
+        note = f"{model} is no longer offered; {usage['model']} was used instead. Set it as the model in Settings."
+        model = usage["model"]
     audit.record(db, action="ai.test", actor=Actor.user, user_id=user.id,
                  after={"provider": provider.key, "model": model, "ok": ok}, request_id=ctx.request_id)  # fmt: skip
     db.commit()
-    return {"ok": ok, "provider": provider.key, "model": model, "seconds": seconds}
+    return {"ok": ok, "provider": provider.key, "model": model, "seconds": seconds, "note": note}
+
+
+@router.get("/models", dependencies=[Depends(rate_limit("ai_models", 10))])
+def ai_models(user: User = Depends(owner_only), db: Session = Depends(get_db)) -> dict:
+    """The chat models the stored key can use, for the Settings model picker."""
+    provider, model, key, ollama_url = ai_config(db, user.id)
+    if provider is None:
+        return {"provider": "off", "models": []}
+    try:
+        models = list_models(provider, key, ollama_url)
+    except LLMError as exc:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc)) from None
+    return {"provider": provider.key, "current": model, "models": models}

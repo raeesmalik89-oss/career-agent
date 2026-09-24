@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { useIsOwner } from "@/components/shell";
+import { useCanEdit } from "@/components/shell";
 import { Button, Card, Empty, ErrorNote, Loading, PageHeader } from "@/components/ui";
 import { ApiError, api } from "@/lib/api";
 import { fmtDate } from "@/lib/format";
@@ -11,7 +11,7 @@ import { useApi } from "@/lib/use-api";
 import { useRouter } from "next/navigation";
 
 export default function ReportsPage() {
-  const owner = useIsOwner();
+  const owner = useCanEdit();
   const router = useRouter();
   const list = useApi<DailyReportSummary[]>("/api/v1/reports/daily?limit=60");
   const [err, setErr] = useState<ApiError | null>(null);

@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { Icon, type IconName } from "@/components/icons";
 import { MatchCard } from "@/components/match";
-import { useIsOwner, useMe } from "@/components/shell";
+import { useCanEdit, useMe } from "@/components/shell";
 import { Badge, Button, Card, CardHeader, Disclaimer, Empty, ErrorNote, Loading, PageHeader, Stat } from "@/components/ui";
 import { ApiError, api } from "@/lib/api";
 import { fmtDateTime, humanize } from "@/lib/format";
@@ -16,7 +17,7 @@ function greeting(): string {
 }
 
 export default function DashboardPage() {
-  const owner = useIsOwner();
+  const owner = useCanEdit();
   const me = useMe();
   const dash = useApi<Dashboard>("/api/v1/dashboard");
   const top = useApi<MatchList>("/api/v1/matches?limit=5");
@@ -56,6 +57,8 @@ export default function DashboardPage() {
         }
       />
       <ErrorNote error={err} />
+
+      {owner && d.facts.pending + d.facts.verified + d.facts.rejected === 0 && <Welcome />}
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <Stat
@@ -171,5 +174,39 @@ function Row({ label, value, tone }: { label: string; value: React.ReactNode; to
       <span className="text-muted">{label}</span>
       <span className={`tabular font-medium ${cls}`}>{value}</span>
     </div>
+  );
+}
+
+function Welcome() {
+  const steps: [string, string, string, string][] = [
+    ["Upload your CV", "PDF or Word. Facts are extracted with the page they came from.", "/profile", "upload"],
+    ["Review your facts", "Verify what is right, fix or reject the rest. Only verified facts are used.", "/profile", "check"],
+    ["Set what you want", "Role families, seniority, cities and remote in Settings.", "/settings", "settings"],
+    ["Tailor your first CV", "Paste a job and get a CV and cover letter built from your facts.", "/tailor", "sparkles"],
+  ];
+  return (
+    <Card className="mb-6 overflow-hidden">
+      <div className="bg-gradient-to-r from-accent-soft to-transparent px-5 py-4">
+        <h2 className="text-[15px] font-semibold">Welcome! Four steps to get started</h2>
+        <p className="mt-0.5 text-sm text-muted">Everything here is private to your account.</p>
+      </div>
+      <ol className="grid gap-px bg-border sm:grid-cols-2 lg:grid-cols-4">
+        {steps.map(([title, text, href, icon], i) => (
+          <li key={title} className="bg-surface">
+            <Link href={href} className="group flex h-full gap-3 p-4 transition hover:bg-surface-2">
+              <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-accent-soft text-accent">
+                <Icon name={icon as IconName} />
+              </span>
+              <span>
+                <span className="block text-sm font-medium group-hover:text-accent">
+                  {i + 1}. {title}
+                </span>
+                <span className="mt-0.5 block text-xs text-muted">{text}</span>
+              </span>
+            </Link>
+          </li>
+        ))}
+      </ol>
+    </Card>
   );
 }

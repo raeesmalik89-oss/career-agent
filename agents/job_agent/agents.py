@@ -243,13 +243,16 @@ def run_job_scan(
     source_keys: list[str] | None = None,
     http: HttpClient | None = None,
     per_source_limit: int = 60,
+    queries: list[str] | None = None,
 ) -> dict:
-    """morning_scan steps 1-4: discover -> store raw -> extract + dedup -> score against the profile."""
+    """morning_scan steps 1-4: discover -> store raw -> extract + dedup -> score against the profile.
+
+    user_id's settings and stored keys (e.g. Jooble) drive discovery; `queries` overrides its role families."""
     from agents.match_agent.agent import run_matching
 
     pipeline = uuid.uuid4()
     disc = JobDiscoveryAgent(http).run(
-        DiscoveryInput(user_id=user_id, source_keys=source_keys, per_source_limit=per_source_limit),
+        DiscoveryInput(user_id=user_id, source_keys=source_keys, per_source_limit=per_source_limit, queries=queries),
         db,
         user_id=user_id,
         pipeline_run_id=pipeline,

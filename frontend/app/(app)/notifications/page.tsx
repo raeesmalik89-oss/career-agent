@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { useIsOwner } from "@/components/shell";
+import { useCanEdit } from "@/components/shell";
 import { Badge, Button, Card, Empty, ErrorNote, Loading, PageHeader, cx } from "@/components/ui";
 import { ApiError, api } from "@/lib/api";
 import { fmtDateTime, humanize } from "@/lib/format";
@@ -18,7 +18,7 @@ const DELIVERY_TONE: Record<string, "good" | "warn" | "bad" | "muted"> = {
 };
 
 export default function NotificationsPage() {
-  const owner = useIsOwner();
+  const owner = useCanEdit();
   const [unreadOnly, setUnreadOnly] = useState(false);
   const res = useApi<NotificationsOut>(`/api/v1/notifications?limit=100${unreadOnly ? "&unread=true" : ""}`);
   const [open, setOpen] = useState<string | null>(null);

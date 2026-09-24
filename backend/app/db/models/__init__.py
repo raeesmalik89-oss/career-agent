@@ -2,7 +2,7 @@
 
 from app.db.models.applications import Application, ApplicationAnswer, ApplicationEvent
 from app.db.models.github import GithubEvidence, GithubProfile, GithubRepository
-from app.db.models.identity import AuthSession, Secret, SettingsVersion, User
+from app.db.models.identity import AuthSession, Invite, Secret, SettingsVersion, User
 from app.db.models.jobs import Job, JobMatch, JobRaw, JobSkill, JobSource, JobSourceLink
 from app.db.models.learning import (
     ConceptMap,
@@ -29,6 +29,7 @@ __all__ = [
     "GithubProfile",
     "GithubRepository",
     "InterviewAnswer",
+    "Invite",
     "InterviewQuestion",
     "InterviewSession",
     "Job",

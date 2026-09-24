@@ -154,6 +154,7 @@ def tailor(
     except LLMError as exc:
         raise AiTailorError(502, str(exc)) from None
     seconds = round(time.monotonic() - started, 1)
+    model = usage.get("model") or model  # the provider may have retired the configured model (see chat_json)
 
     cited_all = sorted({fid for sec in ("experience", "projects", "education", "certifications")
                         for e in resume[sec] for fid in e["fact_ids"]})  # fmt: skip

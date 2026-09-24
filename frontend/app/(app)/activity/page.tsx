@@ -1,14 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { useIsOwner } from "@/components/shell";
+import { useCanEdit } from "@/components/shell";
 import { Badge, Card, Empty, ErrorNote, Loading, PageHeader, cx } from "@/components/ui";
 import { fmtDateTime, humanize } from "@/lib/format";
 import type { AgentRun, AuditEntry } from "@/lib/types";
 import { useApi } from "@/lib/use-api";
 
 export default function ActivityPage() {
-  const owner = useIsOwner();
+  const owner = useCanEdit();
   const [tab, setTab] = useState<"audit" | "runs">("audit");
   const audit = useApi<AuditEntry[]>(owner && tab === "audit" ? "/api/v1/audit-logs?limit=200" : null);
   const runs = useApi<AgentRun[]>(owner && tab === "runs" ? "/api/v1/agent-runs?limit=100" : null);

@@ -13,7 +13,7 @@ from agents.interview_agent.service import InterviewError
 from app.db.enums import Actor
 from app.db.models import InterviewQuestion, InterviewSession, User
 from app.db.session import get_db
-from app.deps import RequestCtx, any_user, owner_only, request_ctx
+from app.deps import WRITER_ROLES, RequestCtx, any_user, owner_only, request_ctx
 from app.services import audit
 
 router = APIRouter(prefix="/interview", tags=["interview"])
@@ -88,7 +88,7 @@ def get_pack(day: str, user: User = Depends(any_user), db: Session = Depends(get
     rows = list(db.scalars(select(InterviewQuestion).where(InterviewQuestion.user_id == user.id,
                                                              InterviewQuestion.pack_date == d)
                            .order_by(*PACK_ORDER)))  # fmt: skip
-    if not rows and d == datetime.now(UTC).date() and user.role.value == "owner":
+    if not rows and d == datetime.now(UTC).date() and user.role in WRITER_ROLES:
         rows = generate_pack(db, user.id, d)
         db.commit()
     return _pack_out(d, rows)

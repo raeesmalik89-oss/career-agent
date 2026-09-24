@@ -158,3 +158,34 @@ def test_client_guards():
     assert parse_json('Sure!\n```json\n{"ok": true}\n```') == {"ok": True}
     with pytest.raises(LLMError):
         parse_json("no json here")
+
+
+def test_retired_model_falls_back_and_prompt_mentions_json(monkeypatch):
+    import integrations.llm as llm
+
+    seen = []
+
+    def fake_request(url, provider, api_key, body):
+        if body is None:  # GET /models
+            return json.dumps({"data": [{"id": "whisper-large-v3"}, {"id": "qwen/qwen3.8-27b"},
+                                        {"id": "openai/gpt-oss-120b"}]}).encode()  # fmt: skip
+        seen.append(body)
+        if body["model"] == "retired-model":
+            raise llm.ProviderHTTPError("Groq HTTP 404: model not found", 404, "model_not_found")
+        assert "json" in body["messages"][0]["content"].lower()
+        return json.dumps(
+            {"choices": [{"message": {"content": '{"ok": true}'}}], "usage": {"total_tokens": 5}}
+        ).encode()
+
+    monkeypatch.setattr(llm, "_request", fake_request)
+    out, usage = llm.chat_json(PROVIDERS["groq"], model="retired-model", api_key="k" * 20, system="ping", user="x")
+    assert out == {"ok": True} and usage["model"] == "openai/gpt-oss-120b"  # best preferred model, not whisper
+    assert [b["model"] for b in seen] == ["retired-model", "openai/gpt-oss-120b"]
+    assert llm.list_models(PROVIDERS["groq"], "k" * 20) == ["openai/gpt-oss-120b", "qwen/qwen3.8-27b"]
+
+    def always_401(url, provider, api_key, body):
+        raise llm.ProviderHTTPError("Groq HTTP 401: the API key was rejected", 401, "invalid_api_key")
+
+    monkeypatch.setattr(llm, "_request", always_401)
+    with pytest.raises(LLMError, match="rejected"):  # other errors are not retried with another model
+        llm.chat_json(PROVIDERS["groq"], model=None, api_key="k" * 20, system="ping", user="x")

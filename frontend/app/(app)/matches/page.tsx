@@ -3,7 +3,7 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 import { MatchCard } from "@/components/match";
-import { useIsOwner } from "@/components/shell";
+import { useCanEdit } from "@/components/shell";
 import { Button, Disclaimer, Empty, ErrorNote, Loading, PageHeader, cx } from "@/components/ui";
 import { ApiError, api, qs } from "@/lib/api";
 import type { MatchList } from "@/lib/types";
@@ -18,7 +18,7 @@ const VIEWS: { key: View; label: string; hint: string }[] = [
 ];
 
 function MatchesView() {
-  const owner = useIsOwner();
+  const owner = useCanEdit();
   const router = useRouter();
   const params = useSearchParams();
   const view: View = params.get("min") === "0" ? (params.get("hidden") ? "all" : "scored") : "shown";

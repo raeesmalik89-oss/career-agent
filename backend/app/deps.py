@@ -69,8 +69,13 @@ def require_role(*roles: Role) -> Callable[[User], User]:
     return dep
 
 
-owner_only = require_role(Role.owner)
-any_user = require_role(Role.owner, Role.viewer)
+# Every query is scoped to the signed-in user, so "owner" here means "the owner of the data being changed":
+# the administrator or a member, each only ever touching their own rows.
+WRITER_ROLES = (Role.owner, Role.member)
+owner_only = require_role(*WRITER_ROLES)
+# Functions that affect everyone: job sources, users and invites, system health and backups.
+admin_only = require_role(Role.owner)
+any_user = require_role(Role.owner, Role.member, Role.viewer)
 
 LIMITERS: dict[str, RateLimiter] = {}
 

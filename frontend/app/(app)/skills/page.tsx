@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { useIsOwner } from "@/components/shell";
+import { useCanEdit } from "@/components/shell";
 import { Badge, Bar, Button, Card, CardHeader, Empty, ErrorNote, Loading, PageHeader, cx } from "@/components/ui";
 import { ApiError, api } from "@/lib/api";
 import { humanize } from "@/lib/format";
@@ -12,7 +12,7 @@ import { useApi } from "@/lib/use-api";
 const STATUS_TONE = { have: "good", partial: "warn", missing: "bad" } as const;
 
 export default function SkillsPage() {
-  const owner = useIsOwner();
+  const owner = useCanEdit();
   const [windowDays, setWindowDays] = useState(30);
   const report = useApi<GapReport>(`/api/v1/skills/gaps?window=${windowDays}`);
   const plan = useApi<LearningPlan>("/api/v1/learning");

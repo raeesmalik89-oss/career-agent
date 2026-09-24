@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { AccountSecurity } from "@/components/account-security";
-import { useIsOwner } from "@/components/shell";
+import { useCanEdit } from "@/components/shell";
 import { Button, Card, CardHeader, ErrorNote, Loading, PageHeader, cx } from "@/components/ui";
 import { ApiError, api } from "@/lib/api";
 import { COMPONENT_LABELS, humanize } from "@/lib/format";
@@ -75,7 +75,7 @@ const CRONS: ["morning_scan" | "afternoon_analysis" | "evening_prep" | "weekly_s
 ];
 
 export default function SettingsPage() {
-  const owner = useIsOwner();
+  const owner = useCanEdit();
   const loaded = useApi<SettingsDoc>("/api/v1/settings");
   const [s, setS] = useState<SettingsDoc | null>(null);
   const [err, setErr] = useState<ApiError | null>(null);
@@ -339,14 +339,20 @@ function AiSettingsCard({ ai, setAi, dirty, owner }: { ai: AiDoc; setAi: (a: AiD
   const [err, setErr] = useState<ApiError | null>(null);
   const [testing, setTesting] = useState(false);
   const chosen = status.data?.providers.find((p) => p.key === ai.provider);
+  const saved = status.data?.provider === ai.provider;
+  const models = useApi<{ models: string[] }>(owner && saved && ai.provider !== "off" && (status.data?.ready ?? false) ? "/api/v1/ai/models" : null);
 
   async function runTest() {
     setTesting(true);
     setErr(null);
     setTest(null);
     try {
-      const r = await api.post<{ ok: boolean; model: string; seconds: number }>("/api/v1/ai/test");
-      setTest(r.ok ? `Connected: ${r.model} answered in ${r.seconds}s.` : "Connected, but the model's reply was unexpected.");
+      const r = await api.post<{ ok: boolean; model: string; seconds: number; note: string | null }>("/api/v1/ai/test");
+      setTest(
+        (r.ok ? `Connected: ${r.model} answered in ${r.seconds}s.` : "Connected, but the model's reply was unexpected.") +
+          (r.note ? ` ${r.note}` : ""),
+      );
+      if (r.note) setAi({ ...ai, model: r.model });
     } catch (e) {
       setErr(e as ApiError);
     } finally {
@@ -400,11 +406,20 @@ function AiSettingsCard({ ai, setAi, dirty, owner }: { ai: AiDoc; setAi: (a: AiD
             <div className="space-y-3">
               <Field label="Model" hint={`Leave empty for the default (${chosen.default_model}).`}>
                 <input
+                  list="ai-models"
                   className="h-8 w-full rounded-md border border-border bg-bg px-2 font-mono text-xs"
                   placeholder={chosen.default_model}
                   value={ai.model ?? ""}
                   onChange={(e) => setAi({ ...ai, model: e.target.value.trim() || null })}
                 />
+                <datalist id="ai-models">
+                  {(models.data?.models ?? []).map((m) => (
+                    <option key={m} value={m} />
+                  ))}
+                </datalist>
+                {models.data && models.data.models.length > 0 && (
+                  <p className="mt-1 text-xs text-muted">Available with your key: {models.data.models.slice(0, 4).join(", ")}</p>
+                )}
               </Field>
               {ai.provider === "ollama" && (
                 <Field label="Ollama address" hint="Only this computer is allowed. Install from ollama.com, then run: ollama pull llama3.2:3b">

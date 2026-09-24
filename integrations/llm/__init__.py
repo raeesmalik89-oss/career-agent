@@ -35,7 +35,7 @@ class Provider:
 
 PROVIDERS: dict[str, Provider] = {
     "groq": Provider(
-        "groq", "Groq", "https://api.groq.com/openai/v1", "llama-3.3-70b-versatile", "groq_api_key", 90,
+        "groq", "Groq", "https://api.groq.com/openai/v1", "openai/gpt-oss-120b", "groq_api_key", 90,
         "Your career facts and the job text are sent to Groq for each rewrite. Groq states it does not train on "
         "API data. Contact details are never sent.",
     ),
@@ -51,6 +51,14 @@ PROVIDERS: dict[str, Provider] = {
     ),
 }  # fmt: skip
 
+# Providers retire models; when the configured one is gone, the first available of these is used instead.
+PREFERRED = {
+    "groq": ["openai/gpt-oss-120b", "qwen/qwen3.8-27b", "openai/gpt-oss-20b", "llama-3.3-70b-versatile"],
+    "gemini": ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash"],
+    "ollama": ["llama3.2:3b", "qwen2.5:3b", "phi3:mini"],
+}
+NOT_CHAT = ("whisper", "guard", "orpheus", "tts", "embed", "embedding", "imagen", "veo", "aqa", "vision-only")
+
 ALLOWED_HOSTS = {"api.groq.com", "generativelanguage.googleapis.com", "127.0.0.1", "localhost"}
 MAX_RESPONSE = 400_000
 FENCE_RX = re.compile(r"^```(?:json)?\s*|\s*```$", re.MULTILINE)
@@ -64,6 +72,67 @@ def endpoint(provider: Provider, ollama_url: str | None = None) -> str:
     if host not in ALLOWED_HOSTS or (parts.scheme != "https" and not local):
         raise LLMError(f"refusing to call {parts.scheme}://{host}: not an allowed AI provider")
     return base + "/chat/completions"
+
+
+def _request(url: str, provider: Provider, api_key: str | None, body: dict | None) -> bytes:
+    headers = {"Content-Type": "application/json", "User-Agent": "career-agent/1.0"}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+    data = json.dumps(body).encode() if body is not None else None
+    req = urllib.request.Request(url, data=data, headers=headers, method="POST" if data else "GET")  # noqa: S310
+    try:
+        with urllib.request.urlopen(req, timeout=provider.timeout_s) as resp:  # noqa: S310 - host allowlisted
+            raw = resp.read(MAX_RESPONSE + 1)
+    except urllib.error.HTTPError as exc:
+        try:
+            err = json.loads(exc.read(8192) or b"{}")
+            err = err[0] if isinstance(err, list) and err else err
+            e = err.get("error") if isinstance(err, dict) else None
+            detail = (e.get("message") or "") if isinstance(e, dict) else str(e or "")
+            code = (e.get("code") or e.get("status") or "") if isinstance(e, dict) else ""
+        except (ValueError, OSError, AttributeError):
+            detail, code = "", ""
+        hint = {401: "the API key was rejected: store a new one", 403: "this key has no access",
+                429: "free-tier rate limit reached; wait a minute and try again"}.get(exc.code, "")  # fmt: skip
+        text = f"{provider.label} HTTP {exc.code}: {'; '.join(x for x in (hint, detail) if x)}"[:400]
+        raise ProviderHTTPError(
+            redact(text).replace(api_key, "***") if api_key else redact(text), exc.code, str(code)
+        ) from None
+    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+        where = " (is Ollama running? start it with: ollama serve)" if provider.key == "ollama" else ""
+        raise LLMError(
+            redact(f"could not reach {provider.label}: {getattr(exc, 'reason', exc)}{where}")[:300]
+        ) from None
+    if len(raw) > MAX_RESPONSE:
+        raise LLMError("the AI response was too large")
+    return raw
+
+
+class ProviderHTTPError(LLMError):
+    def __init__(self, message: str, status: int, code: str):
+        super().__init__(message)
+        self.status = status
+        self.code = code
+
+    @property
+    def model_missing(self) -> bool:
+        return self.status == 404 or "model" in self.code.lower() and "not" in self.code.lower()
+
+
+def list_models(provider: Provider, api_key: str | None, ollama_url: str | None = None) -> list[str]:
+    """Chat models this key can use (OpenAI-compatible GET /models), best-known first."""
+    url = endpoint(provider, ollama_url).removesuffix("/chat/completions") + "/models"
+    try:
+        payload = json.loads(_request(url, provider, api_key, None))
+    except ValueError:
+        raise LLMError(f"{provider.label} returned an unreadable model list") from None
+    ids = []
+    for m in payload.get("data", []):
+        mid = str(m.get("id", "")).removeprefix("models/")
+        if mid and m.get("active", True) is not False and not any(t in mid.lower() for t in NOT_CHAT):
+            ids.append(mid)
+    pref = PREFERRED.get(provider.key, [])
+    return sorted(set(ids), key=lambda i: (pref.index(i) if i in pref else len(pref), i))
 
 
 def parse_json(content: str) -> dict:
@@ -95,40 +164,37 @@ def chat_json(
     if provider.secret and not api_key:
         raise LLMError(f"no {provider.label} API key stored (Settings → AI)")
     url = endpoint(provider, ollama_url)
-    body = {
-        "model": model or provider.default_model,
-        "temperature": temperature,
-        "response_format": {"type": "json_object"},
-        "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
-    }
-    headers = {"Content-Type": "application/json", "User-Agent": "career-agent/1.0"}
-    if api_key:
-        headers["Authorization"] = f"Bearer {api_key}"
-    req = urllib.request.Request(url, data=json.dumps(body).encode(), headers=headers, method="POST")  # noqa: S310
+    chosen = model or provider.default_model
+
+    def call(m: str) -> bytes:
+        body = {
+            "model": m,
+            "temperature": temperature,
+            "response_format": {"type": "json_object"},
+            # some providers (Groq) require the word "json" in the prompt when JSON output is requested
+            "messages": [
+                {"role": "system", "content": system + "\n\nRespond with a single JSON object only."},
+                {"role": "user", "content": user},
+            ],
+        }
+        return _request(url, provider, api_key, body)
+
     try:
-        with urllib.request.urlopen(req, timeout=provider.timeout_s) as resp:  # noqa: S310 - host allowlisted above
-            raw = resp.read(MAX_RESPONSE + 1)
-    except urllib.error.HTTPError as exc:
-        try:
-            detail = json.loads(exc.read(8192) or b"{}")
-            detail = detail.get("error", {}).get("message") if isinstance(detail.get("error"), dict) else detail
-        except (ValueError, OSError):
-            detail = ""
-        hint = {401: "the API key was rejected", 403: "access denied", 404: "unknown model name",
-                429: "free-tier rate limit reached; wait a minute"}.get(exc.code, "")  # fmt: skip
-        raise LLMError(
-            redact(f"{provider.label} HTTP {exc.code}: {hint or detail}"[:300]).replace(api_key or "\0", "***")
-        ) from None
-    except (urllib.error.URLError, TimeoutError, OSError) as exc:
-        where = " (is Ollama running? start it with: ollama serve)" if provider.key == "ollama" else ""
-        raise LLMError(
-            redact(f"could not reach {provider.label}: {getattr(exc, 'reason', exc)}{where}")[:300]
-        ) from None
-    if len(raw) > MAX_RESPONSE:
-        raise LLMError("the AI response was too large")
+        raw = call(chosen)
+    except ProviderHTTPError as exc:
+        if not exc.model_missing:
+            raise
+        # the model was retired or renamed: use the best one the provider still offers, once
+        available = [m for m in list_models(provider, api_key, ollama_url) if m != chosen]
+        if not available:
+            raise LLMError(f"{exc} (and no other model is available for this key)") from None
+        chosen = available[0]
+        raw = call(chosen)
     try:
         payload = json.loads(raw)
         content = payload["choices"][0]["message"]["content"] or ""
     except (ValueError, KeyError, IndexError, TypeError):
         raise LLMError("unexpected response from the AI provider") from None
-    return parse_json(content), payload.get("usage") or {}
+    usage = dict(payload.get("usage") or {})
+    usage["model"] = chosen
+    return parse_json(content), usage

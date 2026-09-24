@@ -14,7 +14,7 @@ from agents.taxonomy import get_taxonomy
 from app.db.enums import Actor
 from app.db.models import LearningItem, Skill, User
 from app.db.session import get_db
-from app.deps import RequestCtx, any_user, owner_only, request_ctx
+from app.deps import WRITER_ROLES, RequestCtx, any_user, owner_only, request_ctx
 from app.services import audit
 
 router = APIRouter(tags=["skills"])
@@ -55,7 +55,7 @@ def skill_gaps(
     if window not in (1, 7, 30):
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "window must be 1, 7 or 30 days")
     report = gap_engine.analyse(db, user.id, window)
-    if user.role.value == "owner":
+    if user.role in WRITER_ROLES:
         gap_engine.save_report(db, user.id, report)
         db.commit()
     guides = learning.get_guides()

@@ -30,6 +30,22 @@ class User(IdMixin, TimestampMixin, Base):
     locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
+class Invite(IdMixin, TimestampMixin, Base):
+    """An invitation to create an account. Only the SHA-256 of the token is stored; single use; expires."""
+
+    __tablename__ = "invites"
+
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    role: Mapped[Role] = mapped_column(str_enum(Role, "invite_role"), nullable=False)
+    email: Mapped[str | None] = mapped_column(String(320))  # if set, only this address can use it
+    note: Mapped[str | None] = mapped_column(String(200))
+    created_by: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("users.id", ondelete="SET NULL"))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    used_by: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("users.id", ondelete="SET NULL"))
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 class AuthSession(IdMixin, TimestampMixin, Base):
     """One row per refresh-token family. The token itself is only stored as a SHA-256 hash."""
 

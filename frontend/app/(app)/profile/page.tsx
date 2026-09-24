@@ -1,7 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useIsOwner } from "@/components/shell";
+import { CvUpload } from "@/components/cv-upload";
+import { useCanEdit } from "@/components/shell";
 import { Badge, Button, Card, CardHeader, Empty, ErrorNote, Loading, PageHeader, cx } from "@/components/ui";
 import { ApiError, api } from "@/lib/api";
 import { factSources, factSubtitle, factTitle, humanize } from "@/lib/format";
@@ -24,7 +25,7 @@ interface ResumeReport {
 }
 
 export default function ProfilePage() {
-  const owner = useIsOwner();
+  const owner = useCanEdit();
   const facts = useApi<Fact[]>("/api/v1/profile/facts");
   const report = useApi<ResumeReport>("/api/v1/resume/intelligence");
   const [type, setType] = useState("experience");
@@ -111,6 +112,21 @@ export default function ProfilePage() {
         title="Profile & facts"
         sub="Everything the agents know about you, with the document it came from. Only you can verify a fact. Applications will only auto-submit verified facts."
       />
+
+      {owner && (facts.data && facts.data.length === 0 ? (
+        <div className="mb-6">
+          <CvUpload onDone={() => void Promise.all([facts.reload(), report.reload()])} />
+        </div>
+      ) : (
+        <details className="group mb-6">
+          <summary className="cursor-pointer list-none text-sm font-medium text-accent hover:underline">
+            + Upload a new or updated CV
+          </summary>
+          <div className="mt-3">
+            <CvUpload onDone={() => void Promise.all([facts.reload(), report.reload()])} />
+          </div>
+        </details>
+      ))}
 
       {exp && (
         <div className="mb-5 grid gap-3 md:grid-cols-3">

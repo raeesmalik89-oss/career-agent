@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Icon } from "@/components/icons";
-import { useIsOwner } from "@/components/shell";
+import { useCanEdit } from "@/components/shell";
 import { Badge, Button, Card, CardHeader, ErrorNote, Loading, PageHeader, cx } from "@/components/ui";
 import { ApiError, api } from "@/lib/api";
 import { STATUS_TONE, fmtDateTime, fmtScore, humanize } from "@/lib/format";
@@ -17,7 +17,7 @@ const PRE_SUBMIT = ["prepared", "pending_approval", "failed"];
 
 export default function ApplicationPage() {
   const { id } = useParams<{ id: string }>();
-  const owner = useIsOwner();
+  const owner = useCanEdit();
   const res = useApi<ApplicationDetail>(`/api/v1/applications/${id}`);
   const ai = useApi<AiStatus>(owner ? "/api/v1/ai/status" : null);
   const [err, setErr] = useState<ApiError | null>(null);

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useState } from "react";
-import { useIsOwner } from "@/components/shell";
+import { useCanEdit } from "@/components/shell";
 import { Badge, Button, Card, CardHeader, ErrorNote, Loading, PageHeader, cx } from "@/components/ui";
 import { ApiError, api } from "@/lib/api";
 import { humanize } from "@/lib/format";
@@ -21,7 +21,7 @@ const KIND_ANCHOR: Record<string, string> = {
 
 export default function SkillGuidePage() {
   const { key } = useParams<{ key: string }>();
-  const owner = useIsOwner();
+  const owner = useCanEdit();
   const res = useApi<SkillGuide>(`/api/v1/learning/skills/${key}`);
   const [err, setErr] = useState<ApiError | null>(null);
 

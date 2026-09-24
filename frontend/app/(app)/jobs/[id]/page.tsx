@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
 import { Breakdown, EligibilityBadge, ScoreBlock } from "@/components/match";
-import { useIsOwner } from "@/components/shell";
+import { useCanEdit } from "@/components/shell";
 import { Badge, Button, Card, CardHeader, Disclaimer, ErrorNote, Loading, PageHeader } from "@/components/ui";
 import { ApiError, api } from "@/lib/api";
 import { KNOCKOUT_LABELS, applyUrl, daysAgo, employerSearchUrl, fmtSalary, humanize } from "@/lib/format";
@@ -242,7 +242,7 @@ function JobFacts({ job, salary }: { job: JobFull; salary: string | null }) {
 }
 
 function PasteFullPosting({ job, onDone }: { job: JobFull; onDone: () => Promise<void> }) {
-  const owner = useIsOwner();
+  const owner = useCanEdit();
   const [text, setText] = useState("");
   const [url, setUrl] = useState("");
   const [busy, setBusy] = useState(false);
@@ -306,7 +306,7 @@ function PasteFullPosting({ job, onDone }: { job: JobFull; onDone: () => Promise
 }
 
 function PrepareButton({ jobId, hidden }: { jobId: string; hidden: boolean }) {
-  const owner = useIsOwner();
+  const owner = useCanEdit();
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -341,7 +341,7 @@ function PrepareButton({ jobId, hidden }: { jobId: string; hidden: boolean }) {
 }
 
 function EmployerLink({ job, onSaved }: { job: JobFull; onSaved: () => Promise<void> }) {
-  const owner = useIsOwner();
+  const owner = useCanEdit();
   const [url, setUrl] = useState("");
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);

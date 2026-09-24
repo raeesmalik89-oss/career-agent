@@ -1,6 +1,6 @@
 [project]
 name = "career-agent"
-version = "1.1.0"
+version = "1.2.0"
 description = "Agentic job search, application, skill-gap and interview-prep platform"
 requires-python = ">=3.12"
 dependencies = [

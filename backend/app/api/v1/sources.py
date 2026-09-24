@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.db.enums import Actor
 from app.db.models import JobSource, User
 from app.db.session import get_db
-from app.deps import RequestCtx, any_user, owner_only, request_ctx
+from app.deps import RequestCtx, admin_only, any_user, request_ctx
 from app.services import audit
 
 router = APIRouter(prefix="/sources", tags=["sources"])
@@ -48,7 +48,7 @@ def list_sources(_: User = Depends(any_user), db: Session = Depends(get_db)):
 def patch_source(
     key: str,
     body: SourcePatch,
-    user: User = Depends(owner_only),
+    user: User = Depends(admin_only),
     db: Session = Depends(get_db),
     ctx: RequestCtx = Depends(request_ctx),
 ):

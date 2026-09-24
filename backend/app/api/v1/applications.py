@@ -15,7 +15,7 @@ from app.api.v1.jobs import _job_out
 from app.db.enums import Actor, ApplicationStatus
 from app.db.models import Application, ApplicationAnswer, ApplicationEvent, Job, JobMatch, ResumeVersion, User
 from app.db.session import get_db
-from app.deps import RequestCtx, any_user, owner_only, rate_limit, request_ctx
+from app.deps import WRITER_ROLES, RequestCtx, any_user, owner_only, rate_limit, request_ctx
 from app.services import audit, storage
 
 router = APIRouter(tags=["applications"])
@@ -162,7 +162,7 @@ def prepare(body: PrepareIn, user: User = Depends(owner_only), db: Session = Dep
 @router.get("/applications/{app_id}")
 def get_application(app_id: uuid.UUID, user: User = Depends(any_user), db: Session = Depends(get_db)) -> dict:
     app = _own(db, user, app_id)
-    if app.status in service.PRE_SUBMIT and user.role.value == "owner":
+    if app.status in service.PRE_SUBMIT and user.role in WRITER_ROLES:
         service.revalidate(db, app)  # facts may have been verified or edited since
         db.commit()
     return _detail(db, app)

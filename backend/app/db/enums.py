@@ -2,7 +2,8 @@ from enum import StrEnum
 
 
 class Role(StrEnum):
-    owner = "owner"
+    owner = "owner"  # the administrator: full access to their own data plus sources, users and system
+    member = "member"  # a person with their own CV, jobs and applications; no admin functions
     viewer = "viewer"
     system = "system"
 

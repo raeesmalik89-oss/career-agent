@@ -15,10 +15,23 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from agents.notification_agent.service import notify, retry_pending
-from app.db.models import Application, GithubProfile, Job, JobMatch, PipelineRun, Skill, SkillGap
+from app.db.enums import Role
+from app.db.models import (
+    Application,
+    GithubProfile,
+    Job,
+    JobMatch,
+    PipelineRun,
+    SchedulerState,
+    Skill,
+    SkillGap,
+    User,
+)
 from app.schemas.settings import UserSettings
 
 MATCH_NOTIFY_CAP = 10
+SHARED_FETCH = timedelta(hours=3)
+WRITERS = (Role.owner, Role.member)
 PREPARE_CAP = 5
 STALE_RUN = timedelta(hours=3)
 
@@ -46,10 +59,49 @@ class StepContext:
 # ---- morning_scan / delta_scan ---------------------------------------------------------------------------------
 
 
-def step_job_scan(ctx: StepContext) -> dict:
-    from agents.job_agent.agents import run_job_scan
+def _admin(db: Session) -> User | None:
+    return db.scalars(
+        select(User).where(User.role == Role.owner, User.is_active.is_(True)).order_by(User.created_at)
+    ).first()
 
-    out = run_job_scan(ctx.db, ctx.user_id)
+
+def shared_queries(db: Session) -> list[str]:
+    """Search terms for everyone's target roles, so one fetch serves every member."""
+    from agents.job_agent.agents import build_queries
+    from app.services import settings_service
+
+    families: list[str] = []
+    for u in db.scalars(select(User).where(User.role.in_(WRITERS), User.is_active.is_(True))):
+        for f in settings_service.get_effective(db, u.id)[0].preferences.target_role_families:
+            if f not in families:
+                families.append(f)
+    return build_queries(families)
+
+
+def step_job_scan(ctx: StepContext) -> dict:
+    """Postings are fetched once for everybody (with the administrator's source keys and quota); a member whose
+    scan runs within SHARED_FETCH of the last fetch only gets their matches re-scored."""
+    from agents.job_agent.agents import run_job_scan
+    from agents.match_agent.agent import run_matching
+
+    state = ctx.db.get(SchedulerState, "discovery")
+    last = state.updated_at if state else None
+    if last is not None and last.tzinfo is None:
+        last = last.replace(tzinfo=UTC)
+    admin = _admin(ctx.db)
+    if last is not None and ctx.now - last < SHARED_FETCH:
+        matching = run_matching(ctx.db, ctx.user_id, pipeline_run_id=ctx.run_id).output
+        out = {"discovery": {"shared": True, "fetched_at": last.isoformat()}, "ingest": {}, "matching": matching,
+               "errors": []}  # fmt: skip
+    else:
+        fetcher = admin.id if admin else ctx.user_id
+        out = run_job_scan(ctx.db, fetcher, queries=shared_queries(ctx.db))
+        if fetcher != ctx.user_id:
+            out["matching"] = run_matching(ctx.db, ctx.user_id, pipeline_run_id=ctx.run_id).output
+        if state is None:
+            ctx.db.add(SchedulerState(key="discovery", value={"by": str(fetcher)}, updated_at=ctx.now))
+        else:
+            state.value, state.updated_at = {"by": str(fetcher)}, ctx.now
     ctx.state["scan"] = out
     counts = out.get("matching", {}).get("counts", {})
     summary = {

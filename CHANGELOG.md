@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.2.0 (2026-09-24)
+
+### Multiple users
+- **Invite-only accounts.** The administrator creates invitation links on the new **Users** page, and people sign up on `/signup` with their own password. Links can be tied to one email address, work once and expire. Only a hash of the token is stored.
+- **Roles.** Admin (you); **member**, with their own CV, facts, matches, applications, interview practice, learning, settings and keys; viewer (read only). Job sources, users and invites, system health and backups are **admin-only**.
+- **Strict separation.** Every query is scoped to the signed-in person. A test checks that a member sees none of another person's applications, facts, notifications, reports, sessions or learning items, and that direct links to them are refused.
+- **One fetch serves everyone.** The morning scan fetches postings once, with the administrator's source keys and quota and the combined target roles of all members. Then each person's matches are scored against their own CV.
+- **Onboarding.** New members start from neutral settings. They get a CV **upload card** (drag and drop, on Profile & facts) and a four-step welcome guide on the Dashboard.
+- **Deactivating** a member signs them out everywhere immediately.
+- Migration `0008`: the `member` role and an `invites` table, tested on SQLite and PostgreSQL.
+
+### AI fix
+- Groq retired `llama-3.3-70b-versatile`, so the default is now `openai/gpt-oss-120b`. **If a provider retires a model again, the app picks the best available model automatically and retries.** Test AI reports the switch.
+- Settings suggests the models your key can use.
+- Error messages include the provider's own explanation.
+- Prompts always ask for JSON, which Groq requires.
+
 ## 1.1.0 (2026-09-24)
 
 - **Tailor my CV** (new page): paste any job and get a CV and cover letter tailored to it. The job is saved and scored, a package is built from your facts, and it is optionally rewritten by AI.

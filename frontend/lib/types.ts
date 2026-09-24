@@ -2,7 +2,7 @@ export interface Me {
   id: string;
   email: string;
   display_name: string;
-  role: "owner" | "viewer" | "system";
+  role: "owner" | "member" | "viewer" | "system";
   totp_enabled: boolean;
   timezone: string;
 }

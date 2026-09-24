@@ -13,7 +13,7 @@ from agents.notification_agent.service import send_test
 from app.db.enums import Actor
 from app.db.models import DailyReport, Notification, PipelineRun, SchedulerState, User
 from app.db.session import get_db, get_sessionmaker
-from app.deps import RequestCtx, any_user, owner_only, rate_limit, request_ctx
+from app.deps import RequestCtx, admin_only, any_user, owner_only, rate_limit, request_ctx
 from app.services import audit, settings_service
 from app.services.secrets import has_secret
 from scheduler.cron import parse
@@ -247,7 +247,7 @@ def test_notification(
 
 
 @router.get("/system/health")
-def system_health(user: User = Depends(owner_only), db: Session = Depends(get_db)) -> dict:
+def system_health(user: User = Depends(admin_only), db: Session = Depends(get_db)) -> dict:
     from app.services.health import snapshot
 
     return snapshot(db, user.id)
@@ -255,7 +255,7 @@ def system_health(user: User = Depends(owner_only), db: Session = Depends(get_db
 
 @router.post("/system/backup", dependencies=[Depends(rate_limit("backup", 3))])
 def backup_now(
-    user: User = Depends(owner_only), db: Session = Depends(get_db), ctx: RequestCtx = Depends(request_ctx)
+    user: User = Depends(admin_only), db: Session = Depends(get_db), ctx: RequestCtx = Depends(request_ctx)
 ) -> dict:
     from app.services import backup
 

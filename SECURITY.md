@@ -31,6 +31,12 @@ person. This page describes how it protects them and what is deliberately out of
 - **`/metrics`** needs `Authorization: Bearer $METRICS_TOKEN` when that is set; otherwise only loopback clients may read it.
 - **Dependencies**: CI runs `pip-audit` on the locked Python dependencies, `npm audit` on the dashboard, and Trivy on the Docker image.
 
+## Multiple users
+- **Invites:** accounts exist only through admin-created invitations. Tokens are 256-bit, shown once, stored as SHA-256, single use, expire in 1–30 days, and are optionally bound to one email. Checking an invite and signing up are rate limited per IP.
+- **Roles:** `owner` (admin), `member` (own data only), `viewer` (read only). Admin-only: job sources, job fetching, users and invites, system health, backups.
+- **Data scoping:** every data query filters by the signed-in user id. Other people's records answer 404, which is covered by an isolation test. Job postings are shared, because they are public; scores, applications and everything personal are not.
+- **Shared keys:** job postings are fetched with the admin's source keys and quota. Members' AI keys are their own.
+
 ## Things the agent will never do
 - Submit an application, send a message to an employer, or accept terms on your behalf. At most it *prepares* a package for your review.
 - Invent experience. Only verified facts are used, and every generated line cites one.

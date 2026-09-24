@@ -264,14 +264,19 @@ class SessionOut(BaseModel):
     expires_at: datetime
 
 
+def check_password_strength(email: str, password: str) -> None:
+    """Shared by sign-up and password change (length is enforced by the request models)."""
+    if len(set(password)) < 6:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "the password is too repetitive")
+    local = email.split("@")[0].lower()
+    if len(local) >= 4 and local in password.lower():
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "the password must not contain your email name")
+
+
 def _check_new_password(user: User, new: str, current: str) -> None:
     if new == current:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "the new password must differ from the current one")
-    if len(set(new)) < 6:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "the new password is too repetitive")
-    local = user.email.split("@")[0].lower()
-    if len(local) >= 4 and local in new.lower():
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "the new password must not contain your email name")
+    check_password_strength(user.email, new)
 
 
 def _revoke_others(db: Session, user: User, keep: uuid.UUID | None) -> int:
