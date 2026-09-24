@@ -140,6 +140,10 @@ uv sync && uv run pytest
 PYTHONPATH=backend:. uv run uvicorn app.main:app --app-dir backend --host 127.0.0.1 --port 8000
 ```
 
+### Everyday use on Windows (double-click)
+- `start-career-agent.cmd` starts the API (port 8010, so it never clashes with a WSL server on 8000) and the dashboard, then opens http://localhost:3000. Close its two windows to stop.
+- `scan-jobs.cmd` runs a scan and re-scores (about 4 Jooble requests), then you look at **Matches**.
+
 ### Dashboard (Windows, Node 24+)
 Start the API first (port 8000), then in a second terminal:
 ```powershell
