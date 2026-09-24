@@ -130,6 +130,8 @@ class JobDiscoveryAgent(Agent[DiscoveryInput]):
                         **(src.config or {}),
                         "requests_used": int((src.config or {}).get("requests_used", 0)) + used,
                     }
+                if connectors[src.key].state:
+                    src.config = {**(src.config or {}), **connectors[src.key].state}
                 postings = results[src.key]
                 if isinstance(postings, SourceError):
                     ctx.error("source_failed", f"{src.key}: {postings}", retryable=True)

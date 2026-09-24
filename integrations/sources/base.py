@@ -56,6 +56,7 @@ class Connector(ABC):
     def __init__(self, http: "HttpClient", config: dict | None = None):
         self.http = http
         self.config = config or {}
+        self.state: dict = {}  # values to persist into the source's config after a fetch (e.g. a rotation cursor)
 
     @abstractmethod
     def fetch(self, queries: list[str], limit: int) -> list[JobPosting]:

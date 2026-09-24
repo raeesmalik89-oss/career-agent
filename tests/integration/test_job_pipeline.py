@@ -218,6 +218,23 @@ def test_widening_never_spends_metered_quota(db, owner, sources):
     assert jooble.config["requests_used"] == 4
 
 
+def test_jooble_rotates_searches_across_scans():
+    """Each scan spends only 4 requests, but successive scans cover the whole list (entry-level searches too)."""
+    config = {"api_key": "abcd-1234-efgh-5678"}
+    seen = []
+    for _ in range(3):
+        http = FakeHttp({"https://jooble.org/api/": {"jobs": []}})
+        j = Jooble(http, config)
+        j.fetch(["devops"], 5)
+        assert j.requests_made == 4
+        seen += [(p["keywords"], p["location"]) for p in http.posted]
+        config = {**config, **j.state}
+    n = len(Jooble.DEFAULT_SEARCHES)
+    assert config["search_cursor"] == 12 % n
+    assert len(seen) == 12 and set(seen) == set(Jooble.DEFAULT_SEARCHES)  # every search, incl. entry-level
+    assert ("junior devops", "Pakistan") in seen
+
+
 def test_jooble_country_host():
     payload = {"jobs": []}
     http = FakeHttp({"https://pk.jooble.org/api/": payload})

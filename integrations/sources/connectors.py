@@ -358,8 +358,8 @@ class Ashby(Connector):
 class Jooble(Connector):
     """Needs a free API key (secret 'jooble_api_key'). Covers Pakistan, including Islamabad on-site roles.
 
-    Free keys have a small total quota (500 requests), so each scan makes a few broad searches
-    (config.searches) instead of one request per query, and stops once config.quota is used up.
+    Free keys have a small total quota (500 requests), so each scan makes only `per_scan` requests (default 4)
+    and rotates through the search list across scans (config.search_cursor), stopping once config.quota is used.
     """
 
     key = "jooble"
@@ -371,7 +371,15 @@ class Jooble(Connector):
         ("cloud engineer", "Islamabad"),
         ("devops", "Pakistan"),
         ("site reliability engineer", "Pakistan"),
+        # entry-level and nearby: the roles most likely to fit early-career profiles
+        ("junior devops", "Pakistan"),
+        ("associate cloud engineer", "Pakistan"),
+        ("devops", "Rawalpindi"),
+        ("junior cloud engineer", "Islamabad"),
+        ("mlops", "Pakistan"),
+        ("machine learning engineer", "Islamabad"),
     )
+    PER_SCAN = 4
 
     def __init__(self, http, config=None):
         super().__init__(http, config)
@@ -387,8 +395,12 @@ class Jooble(Connector):
         if remaining <= 0:
             raise SourceError("Jooble request quota used up; ask Jooble for more or disable the source")
         searches = [tuple(x) for x in self.config.get("searches", self.DEFAULT_SEARCHES)]
+        per_scan = min(int(self.config.get("per_scan", self.PER_SCAN)), len(searches), remaining)
+        cursor = int(self.config.get("search_cursor", 0)) % max(len(searches), 1)
+        batch = [searches[(cursor + i) % len(searches)] for i in range(per_scan)]
+        self.state["search_cursor"] = (cursor + per_scan) % max(len(searches), 1)
         out: dict[str, JobPosting] = {}
-        for keywords, location in searches[: min(len(searches), remaining)]:
+        for keywords, location in batch:
             host = self.config.get("api_host", "jooble.org")  # keys are issued per country site
             if host not in self.hosts:
                 raise SourceError(f"unsupported Jooble host {host!r}")

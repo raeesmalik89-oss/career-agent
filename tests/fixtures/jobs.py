@@ -137,6 +137,7 @@ class FakeHttp:
         self.routes = routes
         self.requests = 0
         self.calls: list[str] = []
+        self.posted: list[dict] = []
 
     def _lookup(self, url: str):
         self.requests += 1
@@ -155,4 +156,5 @@ class FakeHttp:
         return self._lookup(url)
 
     def post_json(self, url: str, payload: dict):
+        self.posted.append(payload)
         return self._lookup(url)
