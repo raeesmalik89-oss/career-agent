@@ -65,7 +65,7 @@ export default function JobsPage() {
       {list.loading && !list.data ? (
         <Loading />
       ) : list.data && list.data.jobs.length ? (
-        <div className="overflow-x-auto rounded-lg border border-border bg-surface">
+        <div className="overflow-x-auto rounded-xl border border-border bg-surface shadow-card">
           <table className="w-full text-sm">
             <thead className="text-left text-xs text-muted">
               <tr className="border-b border-border">

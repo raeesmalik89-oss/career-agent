@@ -107,7 +107,7 @@ export default function SessionPage() {
             <p className="mt-1 text-xs text-muted">{s.disclaimer}</p>
           </Card>
           {s.items.map((it) => (
-            <details key={it.question_id} className="rounded-lg border border-border bg-surface p-4">
+            <details key={it.question_id} className="rounded-xl border border-border bg-surface p-4 shadow-card">
               <summary className="flex cursor-pointer items-center justify-between gap-3 text-sm font-medium">
                 <span>{it.question}</span>
                 {it.score !== null && <span className={cx("tabular", scoreClass(it.score))}>{it.score}</span>}

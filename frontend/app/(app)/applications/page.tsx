@@ -38,7 +38,7 @@ export default function ApplicationsPage() {
                 {g.title} <span className="text-muted tabular">({rows.length})</span>
               </h2>
               {g.hint && <p className="mb-2 text-xs text-muted">{g.hint}</p>}
-              <ul className="divide-y divide-border rounded-lg border border-border bg-surface">
+              <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-surface shadow-card">
                 {rows.map((a) => (
                   <li key={a.id}>
                     <Link href={`/applications/${a.id}`} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 hover:bg-surface-2">

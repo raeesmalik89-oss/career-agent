@@ -234,7 +234,7 @@ function ConceptMap({ map }: { map: NonNullable<SkillGuide["concept_map"]> }) {
         }
       />
       <div className="overflow-x-auto px-4 py-3">
-        <div className="inline-block rounded-full bg-accent px-3 py-1 text-sm font-semibold text-white dark:text-[#0f1115]">{map.tree.label}</div>
+        <div className="inline-block rounded-full bg-accent px-3 py-1 text-sm font-semibold text-accent-contrast">{map.tree.label}</div>
         <ul className="mt-2 space-y-1 border-l border-border pl-4">
           {map.tree.children.map((c) => (
             <Branch key={c.label} node={c} depth={1} />

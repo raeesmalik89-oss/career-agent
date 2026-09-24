@@ -2,65 +2,99 @@
 
 @custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 
+/* Design tokens: indigo accent on slate neutrals (light), deep navy surfaces (dark). */
 :root {
-  --bg: #f6f7f9;
+  --bg: #f6f7fb;
   --surface: #ffffff;
-  --surface-2: #f1f3f6;
-  --border: #e2e5ea;
-  --text: #16191f;
-  --muted: #5f6673;
-  --faint: #8a909b;
-  --accent: #1f5fd1;
-  --accent-soft: #e8effc;
-  --good: #1a7f4b;
-  --good-soft: #e5f4ec;
-  --warn: #9a5b00;
-  --warn-soft: #fbf1df;
-  --bad: #b3261e;
-  --bad-soft: #fbe9e7;
-  --focus: #1f5fd1;
+  --surface-2: #f1f3f9;
+  --surface-3: #e9ecf5;
+  --border: #e3e7f0;
+  --border-strong: #cfd5e3;
+  --text: #0f172a;
+  --muted: #5b6477;
+  --faint: #8a93a6;
+  --accent: #4f46e5;
+  --accent-hover: #4338ca;
+  --accent-soft: #eef0ff;
+  --accent-contrast: #ffffff;
+  --good: #047857;
+  --good-soft: #e7f7f0;
+  --warn: #b45309;
+  --warn-soft: #fdf3e2;
+  --bad: #c2261d;
+  --bad-soft: #fdecea;
+  --focus: #6366f1;
+  --sidebar: #0f1330;
+  --sidebar-text: #c8cdf0;
+  --sidebar-muted: #7d84b3;
+  --sidebar-active: #1f2556;
+  --shadow-sm: 0 1px 2px rgb(15 23 42 / 0.05);
+  --shadow: 0 1px 3px rgb(15 23 42 / 0.06), 0 1px 2px rgb(15 23 42 / 0.04);
+  --shadow-lg: 0 10px 30px -10px rgb(15 23 42 / 0.18);
   color-scheme: light;
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #0f1115;
-    --surface: #171a20;
-    --surface-2: #1e2229;
-    --border: #2a2f38;
-    --text: #e8eaee;
-    --muted: #a0a7b3;
-    --faint: #767d89;
-    --accent: #7aa5f5;
-    --accent-soft: #1b2740;
-    --good: #5cc98d;
-    --good-soft: #15291f;
-    --warn: #e7b35c;
-    --warn-soft: #2d2415;
-    --bad: #f08a80;
-    --bad-soft: #321a18;
-    --focus: #7aa5f5;
+    --bg: #0a0c14;
+    --surface: #11141f;
+    --surface-2: #171b29;
+    --surface-3: #1e2334;
+    --border: #232839;
+    --border-strong: #2f3549;
+    --text: #e7e9f2;
+    --muted: #9aa1b6;
+    --faint: #6f7690;
+    --accent: #8b8cf8;
+    --accent-hover: #a5a6fb;
+    --accent-soft: #1d1f42;
+    --accent-contrast: #0a0c14;
+    --good: #4ad09a;
+    --good-soft: #0f2a22;
+    --warn: #f0b458;
+    --warn-soft: #2e2413;
+    --bad: #f58b82;
+    --bad-soft: #341a19;
+    --focus: #8b8cf8;
+    --sidebar: #080a12;
+    --sidebar-text: #c8cdf0;
+    --sidebar-muted: #6f7690;
+    --sidebar-active: #171b33;
+    --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);
+    --shadow: 0 1px 3px rgb(0 0 0 / 0.45);
+    --shadow-lg: 0 10px 30px -10px rgb(0 0 0 / 0.6);
     color-scheme: dark;
   }
 }
 
 :root[data-theme="dark"] {
-  --bg: #0f1115;
-  --surface: #171a20;
-  --surface-2: #1e2229;
-  --border: #2a2f38;
-  --text: #e8eaee;
-  --muted: #a0a7b3;
-  --faint: #767d89;
-  --accent: #7aa5f5;
-  --accent-soft: #1b2740;
-  --good: #5cc98d;
-  --good-soft: #15291f;
-  --warn: #e7b35c;
-  --warn-soft: #2d2415;
-  --bad: #f08a80;
-  --bad-soft: #321a18;
-  --focus: #7aa5f5;
+  --bg: #0a0c14;
+  --surface: #11141f;
+  --surface-2: #171b29;
+  --surface-3: #1e2334;
+  --border: #232839;
+  --border-strong: #2f3549;
+  --text: #e7e9f2;
+  --muted: #9aa1b6;
+  --faint: #6f7690;
+  --accent: #8b8cf8;
+  --accent-hover: #a5a6fb;
+  --accent-soft: #1d1f42;
+  --accent-contrast: #0a0c14;
+  --good: #4ad09a;
+  --good-soft: #0f2a22;
+  --warn: #f0b458;
+  --warn-soft: #2e2413;
+  --bad: #f58b82;
+  --bad-soft: #341a19;
+  --focus: #8b8cf8;
+  --sidebar: #080a12;
+  --sidebar-text: #c8cdf0;
+  --sidebar-muted: #6f7690;
+  --sidebar-active: #171b33;
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);
+  --shadow: 0 1px 3px rgb(0 0 0 / 0.45);
+  --shadow-lg: 0 10px 30px -10px rgb(0 0 0 / 0.6);
   color-scheme: dark;
 }
 
@@ -68,19 +102,31 @@
   --color-bg: var(--bg);
   --color-surface: var(--surface);
   --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
   --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
   --color-text: var(--text);
   --color-muted: var(--muted);
   --color-faint: var(--faint);
   --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
   --color-accent-soft: var(--accent-soft);
+  --color-accent-contrast: var(--accent-contrast);
   --color-good: var(--good);
   --color-good-soft: var(--good-soft);
   --color-warn: var(--warn);
   --color-warn-soft: var(--warn-soft);
   --color-bad: var(--bad);
   --color-bad-soft: var(--bad-soft);
-  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-text: var(--sidebar-text);
+  --color-sidebar-muted: var(--sidebar-muted);
+  --color-sidebar-active: var(--sidebar-active);
+  --shadow-card: var(--shadow);
+  --shadow-soft: var(--shadow-sm);
+  --shadow-pop: var(--shadow-lg);
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial,
+    sans-serif;
   --font-mono: ui-monospace, "Cascadia Code", "SF Mono", Menlo, Consolas, monospace;
 }
 
@@ -93,16 +139,64 @@ body {
 body {
   font-family: var(--font-sans);
   font-size: 14px;
-  line-height: 1.5;
+  line-height: 1.55;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: "cv11", "ss01";
+}
+
+h1,
+h2,
+h3 {
+  letter-spacing: -0.011em;
+}
+
+/* Form controls: every page gets the same polished inputs without per-page classes. */
+input:not([type="checkbox"]):not([type="radio"]),
+select,
+textarea {
+  transition:
+    border-color 120ms,
+    box-shadow 120ms;
+}
+input:not([type="checkbox"]):not([type="radio"]):hover,
+select:hover,
+textarea:hover {
+  border-color: var(--border-strong);
+}
+input:not([type="checkbox"]):not([type="radio"]):focus,
+select:focus,
+textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+input[type="checkbox"],
+input[type="radio"] {
+  accent-color: var(--accent);
+  width: 15px;
+  height: 15px;
+}
+::placeholder {
+  color: var(--faint);
 }
 
 :focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 2px;
-  border-radius: 4px;
+  border-radius: 6px;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--accent) 25%, transparent);
 }
 
 .tabular {
   font-variant-numeric: tabular-nums;
+}
+
+/* Thin, quiet scrollbars */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
 }

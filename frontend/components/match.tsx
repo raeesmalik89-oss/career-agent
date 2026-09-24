@@ -23,14 +23,36 @@ export function ScoreBlock({ score, confidence, threshold, hidden = false, size 
   size?: "md" | "lg";
 }) {
   const tone = scoreTone(score, threshold, hidden);
+  const px = size === "lg" ? 88 : 64;
+  const r = px / 2 - 5;
+  const circ = 2 * Math.PI * r;
+  const pct = Math.max(0, Math.min(100, score)) / 100;
   return (
-    <div className="flex shrink-0 flex-col items-end text-right">
-      <div className={cx("tabular font-semibold leading-none", size === "lg" ? "text-4xl" : "text-2xl", toneText(tone))}>
-        {fmtScore(score)}
-        <span className="text-xs font-normal text-faint">/100</span>
+    <div className="flex shrink-0 flex-col items-center text-center">
+      <div className="relative" style={{ width: px, height: px }} role="img" aria-label={`Fit score ${fmtScore(score)} of 100`}>
+        <svg width={px} height={px} viewBox={`0 0 ${px} ${px}`} className="-rotate-90" aria-hidden>
+          <circle cx={px / 2} cy={px / 2} r={r} fill="none" strokeWidth={size === "lg" ? 7 : 5.5} className="stroke-surface-3" />
+          <circle
+            cx={px / 2}
+            cy={px / 2}
+            r={r}
+            fill="none"
+            strokeWidth={size === "lg" ? 7 : 5.5}
+            strokeLinecap="round"
+            strokeDasharray={circ}
+            strokeDashoffset={circ * (1 - pct)}
+            className={cx("transition-[stroke-dashoffset] duration-700", toneText(tone))}
+            stroke="currentColor"
+          />
+        </svg>
+        <div className="absolute inset-0 grid place-items-center">
+          <span className={cx("tabular font-semibold leading-none tracking-tight", size === "lg" ? "text-2xl" : "text-lg", toneText(tone))}>
+            {fmtScore(score)}
+          </span>
+        </div>
       </div>
-      <div className="mt-1 text-xs text-muted">
-        Confidence: <span className={toneText(CONF_TONE[confidence])}>{humanize(confidence)}</span>
+      <div className="mt-1.5 text-[11px] text-muted">
+        <span className={toneText(CONF_TONE[confidence])}>{humanize(confidence)}</span> confidence
       </div>
     </div>
   );
@@ -80,7 +102,7 @@ export function MatchCard({
   const j = m.job;
   const salary = fmtSalary(j.salary);
   return (
-    <article className="rounded-lg border border-border bg-surface p-4">
+    <article className="rounded-xl border border-border bg-surface p-5 shadow-card transition hover:border-border-strong hover:shadow-pop">
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-1.5">
