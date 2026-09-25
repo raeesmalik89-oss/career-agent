@@ -43,6 +43,22 @@ Close the three windows to stop. Missed scheduled runs from the last 12 hours ar
 
 ---
 
+## A2. This PC, shared through a Cloudflare quick tunnel
+
+For letting a few invited people use it without a server. `cloudflared` connects outwards, so no router port is
+opened, and the traffic is HTTPS.
+
+1. Install cloudflared once (a new window afterwards): `winget install --id Cloudflare.cloudflared`
+2. Close the normal Career Agent windows, then double-click `start-public.cmd`. It runs in production mode
+   (secure cookies, no `/docs`), builds the dashboard, starts everything and prints the public address
+   (`https://<random>.trycloudflare.com`, also saved in `storage/public-url.txt`).
+3. Sign in **at that address** and create invitations under Users, so the links use it.
+
+Limits: the address changes on every start (open invitations then stop working; create new ones), and it only
+works while the PC is on. Only the dashboard is exposed; the API, `/metrics` and Ollama stay on 127.0.0.1.
+Rate limits use Cloudflare's `CF-Connecting-IP`, trusted only from the local proxy. For a fixed address, use a
+named tunnel with your own domain (a free Cloudflare account) or section C.
+
 ## B. Docker on one machine
 
 ```bash

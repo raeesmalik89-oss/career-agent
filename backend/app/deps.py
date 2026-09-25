@@ -1,3 +1,4 @@
+import ipaddress
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -24,8 +25,24 @@ class RequestCtx:
     user_agent: str | None
 
 
+def client_ip(request: Request) -> str | None:
+    """The visitor's address. Behind the dashboard proxy every request comes from this machine, so when the
+    direct peer is loopback, Cloudflare's CF-Connecting-IP (set by Cloudflare, not by the browser) is used."""
+    peer = request.client.host if request.client else None
+    try:
+        local = peer is not None and ipaddress.ip_address(peer).is_loopback
+    except ValueError:
+        local = False
+    if local and (cf := request.headers.get("cf-connecting-ip", "").strip()):
+        try:
+            return str(ipaddress.ip_address(cf))
+        except ValueError:
+            pass
+    return peer
+
+
 def request_ctx(request: Request) -> RequestCtx:
-    ip = request.client.host if request.client else None
+    ip = client_ip(request)
     return RequestCtx(
         request_id=getattr(request.state, "request_id", ""),
         ip_hash=sha256_hex(ip) if ip else None,
