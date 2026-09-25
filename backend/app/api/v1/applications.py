@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from agents.application_agent import service
+from agents.application_agent.ai_suggest import SuggestError, kind_of, suggest
 from agents.application_agent.ai_tailor import AiTailorError, ai_config, tailor
 from agents.application_agent.docx_render import safe_filename
 from agents.application_agent.service import ApplicationError
@@ -32,6 +33,13 @@ class AnswerIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     answer: str = Field(max_length=10_000)
+    ai_pick: bool = False  # chosen from the AI's suggestions
+
+
+class SuggestIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    refresh: bool = False
 
 
 class TailorIn(BaseModel):
@@ -119,6 +127,8 @@ def _detail(db: Session, app: Application) -> dict:
                 "cited_fact_ids": a.cited_fact_ids,
                 "approved": a.approved_by_user_at is not None,
                 "ai": bool(app.policy_decision.get("answers_meta", {}).get(str(a.id), {}).get("ai")),
+                "suggest": kind_of(a),  # salary | motivation | generic | None: the AI can offer options
+                "suggestions": app.policy_decision.get("suggestions", {}).get(str(a.id)),
             }
             for a in answers
         ],
@@ -173,7 +183,7 @@ def edit_answer(app_id: uuid.UUID, answer_id: uuid.UUID, body: AnswerIn, user: U
                 db: Session = Depends(get_db), ctx: RequestCtx = Depends(request_ctx)):  # fmt: skip
     app = _own(db, user, app_id)
     try:
-        service.edit_answer(db, app, answer_id, body.answer)
+        service.edit_answer(db, app, answer_id, body.answer, ai_pick=body.ai_pick)
     except ApplicationError as e:
         return _raise(e)
     _audit(db, user, ctx, "application.answer_edit", app, answer_id=str(answer_id))
@@ -273,6 +283,27 @@ def ai_tailor(app_id: uuid.UUID, user: User = Depends(owner_only), db: Session =
            rewritten=report["lines_rewritten"], kept_original=len(report["kept_original"]))  # fmt: skip
     db.commit()
     return _detail(db, app)
+
+
+@router.post("/applications/{app_id}/answers/{answer_id}/suggest",
+             dependencies=[Depends(rate_limit("ai_suggest", 12))])  # fmt: skip
+def suggest_answer(app_id: uuid.UUID, answer_id: uuid.UUID, body: SuggestIn | None = None,
+                   user: User = Depends(owner_only), db: Session = Depends(get_db)) -> dict:  # fmt: skip
+    """2-3 AI options for an answer that needs your input (why this company, salary...). Nothing is saved to the
+    answer: you pick one and save it, or write your own."""
+    app = _own(db, user, app_id)
+    if app.status not in service.PRE_SUBMIT:
+        raise HTTPException(status.HTTP_409_CONFLICT, "this application is already approved")
+    answer = db.get(ApplicationAnswer, answer_id)
+    if answer is None or answer.application_id != app.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "answer not found")
+    try:
+        result = suggest(db, app, answer, refresh=bool(body and body.refresh))
+    except SuggestError as e:
+        db.rollback()
+        raise HTTPException(e.status, e.message) from None
+    db.commit()
+    return result
 
 
 @router.post("/tailor", status_code=status.HTTP_201_CREATED, dependencies=[Depends(rate_limit("tailor", 6))])

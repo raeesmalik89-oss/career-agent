@@ -2,18 +2,41 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Icon } from "@/components/icons";
 import { useCanEdit } from "@/components/shell";
 import { Badge, Button, Card, CardHeader, ErrorNote, Loading, PageHeader, cx } from "@/components/ui";
 import { ApiError, api } from "@/lib/api";
 import { STATUS_TONE, fmtDateTime, fmtScore, humanize } from "@/lib/format";
-import type { AiReport, AiStatus, ApplicationAnswerRow, ApplicationDetail, CheckItem } from "@/lib/types";
+import type { AiReport, AiStatus, AnswerSuggestions, ApplicationAnswerRow, ApplicationDetail, CheckItem } from "@/lib/types";
 import { useApi } from "@/lib/use-api";
 
 const CHECK_TONE = { valid: "good", needs_approval: "warn", unsupported: "bad" } as const;
 const CHECK_LABEL = { valid: "checked", needs_approval: "review", unsupported: "unsupported" } as const;
 const PRE_SUBMIT = ["prepared", "pending_approval", "failed"];
+const PLACEHOLDER = /\[[^\]]{3,}\]/;
+
+/** Empty, or still has [bracketed] text that only you can fill. */
+function needsInput(text: string) {
+  return !text.trim() || PLACEHOLDER.test(text);
+}
+
+/** An option replaces the [bracketed] part (e.g. in the cover letter), or the whole answer. */
+function fillWith(current: string, option: string) {
+  return PLACEHOLDER.test(current) ? current.replace(PLACEHOLDER, option) : option;
+}
+
+// One AI request at a time: free tiers limit tokens per minute.
+let queue: Promise<unknown> = Promise.resolve();
+function queued<T>(fn: () => Promise<T>): Promise<T> {
+  const p = queue.then(fn, fn);
+  queue = p.catch(() => undefined);
+  return p;
+}
+
+function fetchSuggestions(appId: string, answerId: string, refresh = false) {
+  return queued(() => api.post<AnswerSuggestions>(`/api/v1/applications/${appId}/answers/${answerId}/suggest`, { refresh }));
+}
 
 export default function ApplicationPage() {
   const { id } = useParams<{ id: string }>();
@@ -23,11 +46,36 @@ export default function ApplicationPage() {
   const [err, setErr] = useState<ApiError | null>(null);
   const [busy, setBusy] = useState(false);
   const [aiBusy, setAiBusy] = useState(false);
+  const [filling, setFilling] = useState<string | null>(null);
 
   async function rewriteWithAi() {
     setAiBusy(true);
     await act(() => api.post<ApplicationDetail>(`/api/v1/applications/${id}/ai-tailor`));
     setAiBusy(false);
+  }
+
+  /** Put the AI's first suggestion into every answer that still needs you. You review them before approving. */
+  async function autofill(targets: ApplicationAnswerRow[]) {
+    setBusy(true);
+    setErr(null);
+    try {
+      let detail: ApplicationDetail | null = null;
+      for (const [i, t] of targets.entries()) {
+        setFilling(`${i + 1} of ${targets.length}`);
+        const s = t.suggestions ?? (await fetchSuggestions(id, t.id));
+        detail = await api.patch<ApplicationDetail>(`/api/v1/applications/${id}/answers/${t.id}`, {
+          answer: fillWith(t.answer, s.options[0].text),
+          ai_pick: true,
+        });
+      }
+      if (detail) res.setData(detail);
+    } catch (e) {
+      setErr(e as ApiError);
+      await res.reload();
+    } finally {
+      setFilling(null);
+      setBusy(false);
+    }
   }
 
   async function act(fn: () => Promise<ApplicationDetail>) {
@@ -49,6 +97,8 @@ export default function ApplicationPage() {
   const editable = owner && PRE_SUBMIT.includes(a.status);
   const checks = new Map((a.resume_validation?.items ?? []).map((c) => [c.path, c]));
   const counts = a.resume_validation?.counts ?? {};
+  const aiOn = Boolean(ai.data && ai.data.provider !== "off");
+  const gaps = a.answers.filter((x) => x.suggest && needsInput(x.answer));
 
   return (
     <>
@@ -117,6 +167,16 @@ export default function ApplicationPage() {
                 </Link>
               )
             )}
+            {aiOn && gaps.length > 0 && (
+              <Button
+                disabled={busy}
+                onClick={() => autofill(gaps)}
+                title="Fill each answer that needs you with the AI's first suggestion. You can change any of them before approving."
+              >
+                <Icon name="zap" />
+                {filling ? `Filling ${filling}…` : `Auto-fill ${gaps.length} answer${gaps.length === 1 ? "" : "s"} with AI`}
+              </Button>
+            )}
             <Button variant={a.ai || !ai.data || ai.data.provider === "off" ? "primary" : "secondary"} disabled={busy || a.blockers.length > 0} onClick={() => act(() => api.post(`/api/v1/applications/${a.id}/approve`))}>
               Approve package
             </Button>
@@ -161,7 +221,7 @@ export default function ApplicationPage() {
         <div className="space-y-4 lg:col-span-3">
           <h2 className="text-sm font-semibold">Answers and cover letter</h2>
           {a.answers.map((ans) => (
-            <AnswerCard key={ans.id} ans={ans} editable={editable} appId={a.id} onSaved={(d) => res.setData(d)} onError={setErr} />
+            <AnswerCard key={ans.id} ans={ans} editable={editable} aiOn={aiOn} appId={a.id} onSaved={(d) => res.setData(d)} onError={setErr} />
           ))}
         </div>
 
@@ -210,12 +270,14 @@ export default function ApplicationPage() {
 function AnswerCard({
   ans,
   editable,
+  aiOn,
   appId,
   onSaved,
   onError,
 }: {
   ans: ApplicationAnswerRow;
   editable: boolean;
+  aiOn: boolean;
   appId: string;
   onSaved: (d: ApplicationDetail) => void;
   onError: (e: ApiError) => void;
@@ -223,14 +285,63 @@ function AnswerCard({
   const [text, setText] = useState(ans.answer);
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
-  useEffect(() => setText(ans.answer), [ans.answer]);
+  const [picked, setPicked] = useState<number | null>(null);
+  const [sugg, setSugg] = useState<AnswerSuggestions | null>(ans.suggestions ?? null);
+  const [suggBusy, setSuggBusy] = useState(false);
+  const [suggErr, setSuggErr] = useState<string | null>(null);
+  const box = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    setText(ans.answer);
+    setPicked(null);
+  }, [ans.answer]);
+  useEffect(() => setSugg(ans.suggestions ?? null), [ans.suggestions]);
   const dirty = text !== ans.answer;
   const long = ans.question === "Cover letter" || ans.category === "open_ended";
+  const canSuggest = editable && aiOn && Boolean(ans.suggest);
+
+  async function loadSuggestions(refresh = false) {
+    setSuggBusy(true);
+    setSuggErr(null);
+    try {
+      setSugg(await fetchSuggestions(appId, ans.id, refresh));
+    } catch (e) {
+      setSuggErr(e instanceof ApiError ? e.detail : "Could not get suggestions.");
+    } finally {
+      setSuggBusy(false);
+    }
+  }
+
+  // an answer that still needs you gets its options straight away (once; the server caches them)
+  const autoAsked = useRef(false);
+  useEffect(() => {
+    if (canSuggest && !autoAsked.current && !ans.suggestions && needsInput(ans.answer)) {
+      autoAsked.current = true;
+      void loadSuggestions();
+    }
+  }, [canSuggest]);
+
+  function pick(i: number) {
+    if (!sugg) return;
+    setText(fillWith(ans.answer, sugg.options[i].text));
+    setPicked(i);
+  }
+
+  function writeOwn() {
+    const at = Math.max(0, text.search(PLACEHOLDER));
+    setText(text.replace(PLACEHOLDER, ""));
+    setPicked(null);
+    requestAnimationFrame(() => {
+      box.current?.focus();
+      box.current?.setSelectionRange(at, at);
+    });
+  }
 
   async function save() {
     setBusy(true);
     try {
-      onSaved(await api.patch<ApplicationDetail>(`/api/v1/applications/${appId}/answers/${ans.id}`, { answer: text }));
+      onSaved(
+        await api.patch<ApplicationDetail>(`/api/v1/applications/${appId}/answers/${ans.id}`, { answer: text, ai_pick: picked !== null }),
+      );
     } catch (e) {
       onError(e as ApiError);
     } finally {
@@ -256,9 +367,10 @@ function AnswerCard({
         <Badge tone={CHECK_TONE[ans.validation_status]}>{CHECK_LABEL[ans.validation_status]}</Badge>
         {ans.ai && (
           <Badge tone="ok" title="Drafted by AI from your facts and the job posting. Read it and make it yours.">
-            ✨ AI draft
+            ✨ AI
           </Badge>
         )}
+        {editable && ans.suggest && needsInput(ans.answer) && <Badge tone="warn">needs you</Badge>}
         {ans.approved && <Badge tone="good">approved</Badge>}
         <button onClick={copy} className="ml-auto text-xs text-accent hover:underline" disabled={!ans.answer}>
           {copied ? "Copied" : "Copy"}
@@ -271,9 +383,22 @@ function AnswerCard({
           ))}
         </ul>
       )}
+      {canSuggest && (
+        <SuggestionPanel
+          sugg={sugg}
+          busy={suggBusy}
+          error={suggErr}
+          picked={picked}
+          open={needsInput(ans.answer)}
+          onAsk={() => loadSuggestions(sugg !== null)}
+          onPick={pick}
+          onWriteOwn={writeOwn}
+        />
+      )}
       {editable ? (
         <>
           <textarea
+            ref={box}
             value={text}
             onChange={(e) => setText(e.target.value)}
             rows={long ? 12 : 2}
@@ -285,7 +410,14 @@ function AnswerCard({
               <Button size="sm" variant="primary" disabled={busy} onClick={save}>
                 Save
               </Button>
-              <Button size="sm" variant="ghost" onClick={() => setText(ans.answer)}>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => {
+                  setText(ans.answer);
+                  setPicked(null);
+                }}
+              >
                 Undo
               </Button>
             </div>
@@ -295,6 +427,105 @@ function AnswerCard({
         <p className="mt-2 whitespace-pre-wrap text-sm">{ans.answer || <span className="text-faint">(not used)</span>}</p>
       )}
     </Card>
+  );
+}
+
+function SuggestionPanel({
+  sugg,
+  busy,
+  error,
+  picked,
+  open,
+  onAsk,
+  onPick,
+  onWriteOwn,
+}: {
+  sugg: AnswerSuggestions | null;
+  busy: boolean;
+  error: string | null;
+  picked: number | null;
+  open: boolean;
+  onAsk: () => void;
+  onPick: (i: number) => void;
+  onWriteOwn: () => void;
+}) {
+  const [shown, setShown] = useState(open);
+  useEffect(() => setShown(open), [open]);
+
+  if (!shown)
+    return (
+      <button
+        className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-accent hover:underline"
+        onClick={() => {
+          setShown(true);
+          if (!sugg) onAsk();
+        }}
+      >
+        <Icon name="sparkles" className="h-3.5 w-3.5" /> {sugg ? "Show AI suggestions" : "Suggest with AI"}
+      </button>
+    );
+
+  return (
+    <div className="mt-3 rounded-xl border border-accent/30 bg-accent-soft/40 p-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <Icon name="sparkles" className="h-4 w-4 text-accent" />
+        <span className="text-sm font-medium">{sugg?.kind === "salary" ? "Suggested salary answers" : "Suggested answers"}</span>
+        <span className="text-xs text-muted">pick one to fill the box, or write your own</span>
+        <button className="ml-auto text-muted hover:text-text" onClick={() => setShown(false)} aria-label="Hide suggestions">
+          <Icon name="x" className="h-3.5 w-3.5" />
+        </button>
+      </div>
+
+      {busy && !sugg && <p className="mt-3 animate-pulse text-sm text-muted">Reading the posting and your profile…</p>}
+      {error && <p className="mt-2 text-sm text-bad">{error}</p>}
+
+      {sugg && (
+        <ul className={cx("mt-3 space-y-2", busy && "opacity-50")}>
+          {sugg.options.map((o, i) => (
+            <li key={o.text}>
+              <button
+                onClick={() => onPick(i)}
+                className={cx(
+                  "w-full rounded-lg border bg-surface px-3 py-2 text-left text-sm shadow-soft transition-colors hover:border-accent",
+                  picked === i ? "border-accent ring-2 ring-accent/30" : "border-border",
+                )}
+              >
+                <span className="flex items-start gap-2">
+                  <span
+                    className={cx(
+                      "mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full text-[10px] font-semibold",
+                      picked === i ? "bg-accent text-white" : "bg-surface-2 text-muted",
+                    )}
+                  >
+                    {picked === i ? <Icon name="check" className="h-3 w-3" /> : i + 1}
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block">{o.text}</span>
+                    {o.why && <span className="mt-0.5 block text-xs text-muted">{o.why}</span>}
+                  </span>
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <Button size="sm" onClick={onWriteOwn}>
+          ✎ Write my own
+        </Button>
+        <Button size="sm" variant="ghost" disabled={busy} onClick={onAsk}>
+          {busy ? "Thinking…" : sugg ? "↻ Different ideas" : "Suggest with AI"}
+        </Button>
+        {sugg && <span className="ml-auto text-[11px] text-faint">{sugg.model}</span>}
+      </div>
+      {sugg && (
+        <p className="mt-2 text-xs text-muted">
+          {sugg.note}
+          {picked !== null && " Press Save below to keep it."}
+        </p>
+      )}
+    </div>
   );
 }
 

@@ -230,7 +230,9 @@ def _build(db: Session, app: Application, job: Job) -> None:
         db.flush()
         meta[str(ans.id)] = {"derived": derived, "user_written": user_written}
     # a rebuild replaces any AI rewrite with the plain fact-based package
-    app.policy_decision = {**{k: v for k, v in app.policy_decision.items() if k != "ai"}, "answers_meta": meta}
+    # (and cached answer suggestions belong to the old answers)
+    kept = {k: v for k, v in app.policy_decision.items() if k not in ("ai", "suggestions")}
+    app.policy_decision = {**kept, "answers_meta": meta}
     _event(db, app, "package_built", Actor.agent, resume_version=str(rv.id), answers=len(rows))
     revalidate(db, app)
 
@@ -301,7 +303,10 @@ def _blockers(db: Session, app: Application) -> list[str]:
     return out
 
 
-def edit_answer(db: Session, app: Application, answer_id: uuid.UUID, text: str) -> ApplicationAnswer:
+def edit_answer(
+    db: Session, app: Application, answer_id: uuid.UUID, text: str, *, ai_pick: bool = False
+) -> ApplicationAnswer:
+    """Your answer. `ai_pick`: you chose it from the AI's suggestions (still your answer, shown with an AI mark)."""
     if app.status not in PRE_SUBMIT:
         raise ApplicationError(409, "this application is already approved; withdraw it to change answers")
     a = db.get(ApplicationAnswer, answer_id)
@@ -310,9 +315,9 @@ def edit_answer(db: Session, app: Application, answer_id: uuid.UUID, text: str) 
     a.answer = text
     a.approved_by_user_at = None
     meta = dict(app.policy_decision.get("answers_meta", {}))
-    meta[str(a.id)] = {**meta.get(str(a.id), {}), "user_written": True}
+    meta[str(a.id)] = {**meta.get(str(a.id), {}), "user_written": True, "ai": ai_pick}
     app.policy_decision = {**app.policy_decision, "answers_meta": meta}
-    _event(db, app, "answer_edited", Actor.user, question=a.question)
+    _event(db, app, "answer_edited", Actor.user, question=a.question, ai_suggestion=ai_pick)
     revalidate(db, app)
     return a
 

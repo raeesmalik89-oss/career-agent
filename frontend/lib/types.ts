@@ -229,6 +229,18 @@ export interface ApplicationAnswerRow {
   cited_fact_ids: string[];
   approved: boolean;
   ai?: boolean;
+  suggest?: "salary" | "motivation" | "generic" | null;
+  suggestions?: AnswerSuggestions | null;
+}
+
+export interface AnswerSuggestions {
+  kind: "salary" | "motivation" | "generic";
+  options: { text: string; why: string }[];
+  dropped: number;
+  note: string;
+  model: string;
+  seconds: number;
+  cached?: boolean;
 }
 
 export interface ApplicationDetail extends ApplicationSummary {

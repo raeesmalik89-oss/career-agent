@@ -100,7 +100,7 @@
 - {key: mlflow, name: MLflow, category: ai_ml, implies: [mlops]}
 - {key: kubeflow, name: Kubeflow, category: ai_ml, implies: [mlops, kubernetes]}
 - {key: mlops, name: MLOps, category: ai_ml, aliases: [ml ops, model deployment, model serving, automated retraining]}
-- {key: llm, name: LLMs, category: ai_ml, aliases: [llm, large language models, large language model, generative ai, genai]}
+- {key: llm, name: LLMs, category: ai_ml, aliases: [llm, llms, large language models, large language model, large-language-model, large-language-models, generative ai, gen ai, genai]}
 - {key: rag, name: RAG, category: ai_ml, aliases: [retrieval-augmented generation, retrieval augmented generation], implies: [llm]}
 - {key: langchain, name: LangChain, category: ai_ml, implies: [llm], adjacent: [langgraph]}
 - {key: langgraph, name: LangGraph, category: ai_ml, implies: [llm, agentic_ai], adjacent: [langchain]}
