@@ -570,7 +570,8 @@ function ResumePreview({ resume, checks }: { resume: NonNullable<ApplicationDeta
         {resume.experience.map((e, ei) => (
           <div key={ei}>
             <p>
-              <Line text={e.title} check={checks.get(`experience.${ei}`)} /> <span className="text-muted">| {e.organization.split(",")[0]} | {e.dates}</span>
+              <Line text={e.title} check={checks.get(`experience.${ei}`)} /> <span className="text-muted">| {e.organization.split(",")[0]}
+                {e.location ? ` | ${e.location}` : ""} | {e.dates}</span>
             </p>
             <ul className="list-disc pl-4">
               {e.bullets.map((b, bi) => (

@@ -57,6 +57,8 @@ def render_resume(resume: dict) -> bytes:
             p = doc.add_paragraph()
             p.add_run(e["title"]).bold = True
             p.add_run(f" | {e['organization']}")
+            if e.get("location"):  # older stored resumes have no location
+                p.add_run(f" | {e['location']}")
             if e["dates"]:
                 p.add_run(f" | {e['dates']}")
             for b in e["bullets"]:

@@ -200,7 +200,7 @@ export interface TailoredResume {
   header: Record<string, ResumeItem>;
   summary: { text: string; ai?: boolean; original?: string | null } | null;
   skills: { group: string; items: (ResumeItem & { skill: string })[] }[];
-  experience: { title: string; organization: string; dates: string; note: string | null; bullets: ResumeItem[]; conflicts: boolean }[];
+  experience: { title: string; organization: string; location?: string | null; dates: string; note: string | null; bullets: ResumeItem[]; conflicts: boolean }[];
   projects: { name: string; technologies: string[]; repo: string | null; bullets: ResumeItem[] }[];
   education: { qualification: string; institution: string; date: string; grade: string | null }[];
   certifications: { name: string; issuer: string | null; issued: string | null; credential_id: string | null }[];

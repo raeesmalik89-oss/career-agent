@@ -139,6 +139,7 @@ def build_resume(db: Session, user_id: uuid.UUID, job: JobView, profile: Candida
             {
                 "title": d.get("title") or "",
                 "organization": d.get("organization") or "",
+                "location": d.get("location") or None,  # e.g. "Canada (Remote)"
                 "dates": _dates(d),
                 "note": "Training programme" if d.get("is_training") else None,
                 "fact_ids": [str(f.id)],
