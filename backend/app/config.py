@@ -4,6 +4,20 @@ from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+def normalize_database_url(url: str) -> str:
+    """Pin the psycopg (v3) driver for bare PostgreSQL URLs.
+
+    Managed hosts (Render, Neon, Heroku, Railway, ...) hand out "postgres://..." / "postgresql://..." URLs.
+    SQLAlchemy would pick the psycopg2 driver for those, but only psycopg (v3) is installed, so make it explicit.
+    Used by both Settings (the app) and the Alembic env (migrations), which reads DATABASE_URL directly.
+    """
+    if url.startswith("postgres://"):
+        return "postgresql+psycopg://" + url[len("postgres://") :]
+    if url.startswith("postgresql://"):
+        return "postgresql+psycopg://" + url[len("postgresql://") :]
+    return url
+
+
 class Settings(BaseSettings):
     """Process configuration. Secrets come from the environment only (never committed)."""
 
@@ -39,13 +53,7 @@ class Settings(BaseSettings):
     @field_validator("database_url")
     @classmethod
     def _normalize_db_url(cls, v: str) -> str:
-        # Managed hosts (Render, Heroku, Railway, ...) hand out "postgres://..." / "postgresql://..." URLs.
-        # SQLAlchemy would pick the psycopg2 driver for those, but only psycopg (v3) is installed, so pin it.
-        if v.startswith("postgres://"):
-            v = "postgresql+psycopg://" + v[len("postgres://") :]
-        elif v.startswith("postgresql://"):
-            v = "postgresql+psycopg://" + v[len("postgresql://") :]
-        return v
+        return normalize_database_url(v)
 
     @field_validator("cookie_secure")
     @classmethod
