@@ -9,6 +9,7 @@ validator can tell it apart from an invented one. Anything that needs the user's
 import re
 import uuid
 from dataclasses import dataclass, field
+from types import SimpleNamespace
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -23,6 +24,15 @@ PLACEHOLDER_RX = re.compile(r"\[[^\]]{3,}\]")
 MAX_TECH_BULLETS = 6
 MAX_PROJECTS = 4
 MAX_PROJECT_BULLETS = 3
+
+# Focus-area CVs: each focus foregrounds skills from these taxonomy categories (first is primary).
+# Used by build_focus_resume to emphasise the candidate's skills, bullets and projects for one area,
+# independent of any single job posting.
+FOCUS_CATEGORIES: dict[str, tuple[str, ...]] = {
+    "devops": ("devops", "cloud"),
+    "cloud": ("cloud", "devops"),
+    "cybersecurity": ("security", "devops", "cloud"),
+}
 
 
 @dataclass
@@ -208,6 +218,24 @@ def build_resume(db: Session, user_id: uuid.UUID, job: JobView, profile: Candida
         "certifications": certifications,
         "languages": {"items": languages[0], "fact_ids": [languages[1]]} if languages else None,
     }
+
+
+def build_focus_resume(
+    db: Session, user_id: uuid.UUID, focus: str, profile: CandidateProfile, taxonomy: Taxonomy
+) -> dict:
+    """A resume emphasising a focus area (devops / cloud / cybersecurity) rather than one job posting.
+
+    Weights come from the taxonomy's skill categories (FOCUS_CATEGORIES), so the CV foregrounds the
+    candidate's own skills, bullets and projects in that area. It reuses build_resume, which reads only
+    `job.skills` to build its weights, so a lightweight stand-in with the focus skills is enough.
+    """
+    primary = FOCUS_CATEGORIES[focus][0]
+    skills = [
+        SimpleNamespace(key=key, requirement="required" if s.category == primary else "preferred")
+        for key, s in taxonomy.skills.items()
+        if s.category in FOCUS_CATEGORIES[focus]
+    ]
+    return build_resume(db, user_id, SimpleNamespace(skills=skills), profile, taxonomy)
 
 
 def _sector_years(facts: list[ProfileFact], sector: str) -> tuple[float, list[str]]:

@@ -83,6 +83,22 @@ export default function TailorPage() {
         </Card>
       )}
 
+      <Card className="mb-6">
+        <CardHeader title="Focus résumés" sub="Download a CV built from your facts, tuned to one area — no job posting needed." />
+        <div className="flex flex-wrap gap-3 px-5 py-5">
+          {([["devops", "DevOps CV"], ["cybersecurity", "Cybersecurity CV"], ["cloud", "Cloud CV"]] as const).map(([key, label]) => (
+            <a
+              key={key}
+              href={`/api/v1/resume/focus/${key}.docx`}
+              className="inline-flex items-center rounded-lg border border-border bg-surface px-4 py-2 text-sm font-medium shadow-soft hover:border-accent"
+            >
+              ⬇ {label}
+            </a>
+          ))}
+        </div>
+        <p className="-mt-2 px-5 pb-4 text-xs text-muted">Built from your uploaded CV — upload it on Profile &amp; facts first.</p>
+      </Card>
+
       <div className="grid gap-6 lg:grid-cols-3">
         <form onSubmit={submit} className="lg:col-span-2">
           <Card>
