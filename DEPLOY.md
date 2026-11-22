@@ -37,16 +37,30 @@ python -c "import os,base64; print(base64.urlsafe_b64encode(os.urandom(32)).deco
 When `career-agent-web` shows **Live**, click its URL (looks like
 `https://career-agent-web.onrender.com`). You'll land on the login page.
 
-### 5. Create your account
-The app seeds no public login for you. Open a shell on the **career-agent-api** service
-(Render dashboard → the service → **Shell**) and run:
+### 5. Create your first login
+The app seeds no public login for you. Pick whichever fits your plan:
+
+**Free plan (no shell) — set two env vars.** Render's free plan has no shell, so the API can
+create the owner for you on startup. On the **career-agent-api** service → **Environment**, add:
+
+| Key | Value |
+|---|---|
+| `BOOTSTRAP_OWNER_EMAIL` | your email, e.g. `you@example.com` |
+| `BOOTSTRAP_OWNER_PASSWORD` | a password, **12+ characters** |
+| `BOOTSTRAP_OWNER_NAME` | your name (optional) |
+
+Save (it redeploys). On boot the app creates the owner once — it's idempotent, so leaving the
+vars in place does nothing on later boots. Then log in on the web URL. Remove
+`BOOTSTRAP_OWNER_PASSWORD` afterwards if you'd rather not keep it in the environment.
+
+**Paid plan (shell) — one command.** Open the service → **Shell** and run:
 
 ```bash
 python -m app.cli create-owner --email you@example.com --name "Your Name"
 ```
 
-It prompts for a password. Then log in on the web URL. (Run `python -m app.cli --help`
-in that shell to see every command.)
+It prompts for a password, then log in on the web URL. (Run `python -m app.cli --help`
+in the shell to see every command.)
 
 ---
 
