@@ -4,11 +4,14 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile, status
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from agents.application_agent.docx_render import render_resume
+from agents.application_agent.package import FOCUS_CATEGORIES, build_focus_resume
+from agents.match_agent.profile import build_profile
 from agents.resume_agent.agent import DocumentInput, ResumeAnalyzerAgent, ResumeAnalyzerInput
 from agents.resume_agent.parsing import MAX_BYTES, SUPPORTED
 from agents.resume_agent.report import build_report
@@ -18,9 +21,29 @@ from app.db.enums import Actor, Confidence, FactType, ReviewStatus, SourceType
 from app.db.models import ProfileFact, ResumeVersion, User
 from app.db.session import get_db
 from app.deps import RequestCtx, any_user, owner_only, rate_limit, request_ctx
-from app.services import audit, storage
+from app.services import audit, settings_service, storage
 
 router = APIRouter(tags=["resume"])
+
+DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+
+
+@router.get("/resume/focus/{focus}.docx")
+def focus_resume(focus: str, user: User = Depends(owner_only), db: Session = Depends(get_db)) -> Response:
+    """Download a CV built from your facts for a focus area (devops, cloud, cybersecurity)."""
+    if focus not in FOCUS_CATEGORIES:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"unknown focus; choose one of {sorted(FOCUS_CATEGORIES)}")
+    taxonomy = get_taxonomy()
+    settings, _ = settings_service.get_effective(db, user.id)
+    profile = build_profile(db, user.id, taxonomy, settings)
+    resume = build_focus_resume(db, user.id, focus, profile, taxonomy)
+    if not (resume["experience"] or resume["projects"] or resume["skills"]):
+        raise HTTPException(status.HTTP_409_CONFLICT, "upload your CV in Profile & facts first")
+    return Response(
+        render_resume(resume),
+        media_type=DOCX,
+        headers={"Content-Disposition": f'attachment; filename="{focus}_cv.docx"'},
+    )
 
 
 class UploadResult(BaseModel):
