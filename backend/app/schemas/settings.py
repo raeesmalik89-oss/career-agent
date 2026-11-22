@@ -16,6 +16,9 @@ ROLE_FAMILIES = [
     "platform",
     "cloud_ai_infra",
     "sre_ai",
+    "security_engineer",
+    "cloud_security",
+    "appsec",
 ]
 SENIORITY_LEVELS = ["intern", "entry", "junior", "mid", "senior", "staff", "principal"]
 
