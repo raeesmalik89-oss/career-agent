@@ -1,0 +1,45 @@
+name: Configure job sources
+
+# One-click setup for job discovery (there is no Sources screen yet). Run it from the Actions tab
+# (Run workflow). It enables the remote job boards (no key needed) and Jooble (which covers Pakistan /
+# Islamabad). For Jooble results, add a free JOOBLE_API_KEY repo secret first (jooble.org/api) and re-run.
+# Uses the same repo secrets as the daily scan: DATABASE_URL, MASTER_KEY, JWT_SECRET, SCAN_EMAIL.
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  configure:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: Install dependencies
+        run: uv sync --frozen --no-dev
+      - name: Enable sources
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          MASTER_KEY: ${{ secrets.MASTER_KEY }}
+          MASTER_KEY_VERSION: "1"
+          APP_ENV: production
+          COOKIE_SECURE: "true"
+          SCAN_EMAIL: ${{ secrets.SCAN_EMAIL }}
+          JOOBLE_API_KEY: ${{ secrets.JOOBLE_API_KEY }}
+          PYTHONPATH: backend
+        run: |
+          if [ -z "$DATABASE_URL" ] || [ -z "$SCAN_EMAIL" ]; then
+            echo "Secrets not configured (need DATABASE_URL and SCAN_EMAIL). See DEPLOY.md."
+            exit 1
+          fi
+          # Remote boards need no key; Jooble covers Pakistan but needs an API key to return results.
+          uv run --no-dev python -m app.cli sources \
+            --enable remoteok remotive himalayas weworkremotely arbeitnow jooble
+          if [ -n "$JOOBLE_API_KEY" ]; then
+            echo "Storing Jooble API key..."
+            printf '%s' "$JOOBLE_API_KEY" | uv run --no-dev python -m app.cli set-secret --email "$SCAN_EMAIL" jooble_api_key
+          else
+            echo "No JOOBLE_API_KEY secret set — Jooble is enabled but will return nothing until you add one."
+          fi
+          echo "Done. The Daily job scan workflow (or a manual run) will now find jobs."
