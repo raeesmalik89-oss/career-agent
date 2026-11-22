@@ -8,7 +8,12 @@ name: Daily job scan
 on:
   schedule:
     - cron: "0 6 * * *" # 06:00 UTC daily
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Force a fresh fetch now (ignore the 3h re-fetch cooldown)"
+        type: boolean
+        default: false
 
 concurrency:
   group: daily-scan
@@ -38,5 +43,9 @@ jobs:
             echo "Secrets not configured (need DATABASE_URL and SCAN_EMAIL). Skipping."
             echo "See DEPLOY.md -> 'Automatic daily scan' to enable."
             exit 0
+          fi
+          if [ "${{ inputs.force }}" = "true" ]; then
+            echo "Forcing a fresh fetch (bypassing the 3h cooldown)..."
+            uv run --no-dev python -m app.cli scan-jobs --email "$SCAN_EMAIL"
           fi
           uv run --no-dev python -m app.cli run-pipeline --email "$SCAN_EMAIL" morning_scan
