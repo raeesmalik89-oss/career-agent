@@ -36,6 +36,17 @@ class Settings(BaseSettings):
     # from other machines). Unset: /metrics is only served to loopback clients.
     metrics_token: str | None = Field(None, min_length=16)
 
+    @field_validator("database_url")
+    @classmethod
+    def _normalize_db_url(cls, v: str) -> str:
+        # Managed hosts (Render, Heroku, Railway, ...) hand out "postgres://..." / "postgresql://..." URLs.
+        # SQLAlchemy would pick the psycopg2 driver for those, but only psycopg (v3) is installed, so pin it.
+        if v.startswith("postgres://"):
+            v = "postgresql+psycopg://" + v[len("postgres://") :]
+        elif v.startswith("postgresql://"):
+            v = "postgresql+psycopg://" + v[len("postgresql://") :]
+        return v
+
     @field_validator("cookie_secure")
     @classmethod
     def _secure_in_prod(cls, v: bool, info):  # noqa: ANN001

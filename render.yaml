@@ -1,0 +1,72 @@
+# Render Blueprint — one-click free deploy of Career Agent.
+#
+# Deploy: push this repo to GitHub, then on https://dashboard.render.com click
+#   New +  ->  Blueprint  ->  pick this repo. Render reads this file and creates:
+#     - career-agent-db   a free PostgreSQL database (pgvector is enabled by the migrations)
+#     - career-agent-api   the FastAPI backend  (Docker, ./Dockerfile)
+#     - career-agent-web   the Next.js dashboard (Docker, ./frontend/Dockerfile) <- open THIS URL
+#
+# You are asked for ONE secret during the deploy: MASTER_KEY. Generate it with
+#   python -c "import os,base64; print(base64.urlsafe_b64encode(os.urandom(32)).decode())"
+# and paste the output. Everything else is wired automatically.
+#
+# Free-tier notes: web services sleep after ~15 min idle (first hit after that is slow),
+# and a free PostgreSQL database expires ~30 days after creation. Fine for a demo.
+# See DEPLOY.md for the full walkthrough and a Railway/Fly alternative.
+
+databases:
+  - name: career-agent-db
+    plan: free
+    databaseName: career_agent
+    user: career
+
+services:
+  # ---- FastAPI backend ------------------------------------------------------
+  - type: web
+    name: career-agent-api
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /healthz
+    autoDeploy: true
+    envVars:
+      - key: APP_ENV
+        value: production
+      # Render routes external traffic to the port named here; the image's uvicorn listens on 8000.
+      - key: PORT
+        value: "8000"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: career-agent-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      # Must be urlsafe-base64 of 32 bytes (44 chars). Render can't generate that shape, so you paste it.
+      - key: MASTER_KEY
+        sync: false
+      - key: MASTER_KEY_VERSION
+        value: "1"
+      # Served over HTTPS by Render, so the session cookie must be Secure.
+      - key: COOKIE_SECURE
+        value: "true"
+
+  # ---- Next.js dashboard (the URL you open in the browser) ------------------
+  - type: web
+    name: career-agent-web
+    runtime: docker
+    plan: free
+    dockerfilePath: ./frontend/Dockerfile
+    dockerContext: ./frontend
+    healthCheckPath: /login
+    autoDeploy: true
+    envVars:
+      - key: PORT
+        value: "3000"
+      # Internal address of the API (host:port, no scheme). next.config.ts adds http://.
+      # The dashboard proxies /api/* to this, server-side, so the browser only ever sees one origin.
+      - key: BACKEND_URL
+        fromService:
+          type: web
+          name: career-agent-api
+          property: hostport
