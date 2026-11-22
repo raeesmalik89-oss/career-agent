@@ -19,6 +19,8 @@ RUN npx next build
 FROM ${NODE_IMAGE} AS runtime
 WORKDIR /app
 ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 PORT=3000 HOSTNAME=0.0.0.0
+# Patch any Alpine OS packages that have a fix available.
+RUN apk upgrade --no-cache
 # The server needs only `node`. The package managers shipped in the base image (npm, npx, corepack, yarn) are
 # removed: they are never used at runtime, and their bundled libraries are where scanners keep finding CVEs.
 RUN rm -rf /usr/local/lib/node_modules /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack \
