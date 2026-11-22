@@ -1,0 +1,42 @@
+name: Daily job scan
+
+# Runs the job-discovery + matching pipeline once a day, for free, without a always-on worker.
+# It connects to your database and runs `morning_scan` (discover jobs, score fit, prep matches).
+# Set up once (see DEPLOY.md → "Automatic daily scan"): add the repo secrets below. Until they are
+# set, the job skips cleanly. You can also run it on demand from the Actions tab (Run workflow).
+
+on:
+  schedule:
+    - cron: "0 6 * * *" # 06:00 UTC daily
+  workflow_dispatch: {}
+
+concurrency:
+  group: daily-scan
+  cancel-in-progress: false
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: Install dependencies
+        run: uv sync --frozen --no-dev
+      - name: Run the daily scan
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          MASTER_KEY: ${{ secrets.MASTER_KEY }}
+          MASTER_KEY_VERSION: "1"
+          APP_ENV: production
+          COOKIE_SECURE: "true"
+          SCAN_EMAIL: ${{ secrets.SCAN_EMAIL }}
+          PYTHONPATH: backend
+        run: |
+          if [ -z "$DATABASE_URL" ] || [ -z "$SCAN_EMAIL" ]; then
+            echo "Secrets not configured (need DATABASE_URL and SCAN_EMAIL). Skipping."
+            echo "See DEPLOY.md -> 'Automatic daily scan' to enable."
+            exit 0
+          fi
+          uv run --no-dev python -m app.cli run-pipeline --email "$SCAN_EMAIL" morning_scan

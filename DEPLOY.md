@@ -88,6 +88,29 @@ in the shell to see every command.)
 
 ---
 
+## Automatic daily scan (free, no always-on worker)
+
+The job-discovery pipeline normally runs in a background scheduler. Free hosts can't run one, so
+[`.github/workflows/daily-scan.yml`](.github/workflows/daily-scan.yml) runs it for you on GitHub's
+free scheduler — once a day it connects to your database and runs `morning_scan` (discover jobs,
+score fit, prep matches). No server, nothing to keep awake.
+
+**Enable it once** — in your GitHub repo → **Settings → Secrets and variables → Actions → New
+repository secret**, add these four:
+
+| Secret | Value |
+|---|---|
+| `DATABASE_URL` | the same Postgres URL your backend uses |
+| `MASTER_KEY` | the same `MASTER_KEY` as your backend |
+| `JWT_SECRET` | the same `JWT_SECRET` as your backend |
+| `SCAN_EMAIL` | the owner email to scan for, e.g. `you@example.com` |
+
+That's it — it runs every morning automatically. Until the secrets are set, the workflow skips
+cleanly. To run it immediately, go to the **Actions** tab → **Daily job scan** → **Run workflow**.
+Change the time by editing the `cron:` line in the workflow (it's in UTC).
+
+---
+
 ## If the dashboard can't reach the API
 
 The dashboard bakes the backend address in at build time. If you see API/login errors:
