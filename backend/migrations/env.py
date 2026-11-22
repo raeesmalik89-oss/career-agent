@@ -11,12 +11,16 @@ target_metadata = Base.metadata
 
 
 def _url() -> str:
+    from app.config import normalize_database_url
+
     url = config.attributes.get("url") or os.environ.get("DATABASE_URL")
     if not url:
         from app.config import get_settings  # reads .env
 
         url = get_settings().database_url
-    return url
+    # DATABASE_URL may be a bare "postgres://" / "postgresql://" from a managed host; pin the psycopg driver
+    # here too, because this reads the env var directly and so bypasses the Settings validator.
+    return normalize_database_url(url)
 
 
 def _render_item(type_, obj, autogen_context):
