@@ -2,7 +2,10 @@ import type { NextConfig } from "next";
 
 // The browser only ever talks to this origin. /api/* is proxied to FastAPI, so the httpOnly,
 // SameSite=strict session cookies work and no token is ever readable by page JavaScript.
-const BACKEND_URL = process.env.BACKEND_URL ?? "http://127.0.0.1:8000";
+// Some hosts (e.g. Render internal networking) expose the API as a bare "host:port" with no scheme;
+// default such values to http:// so the rewrite destination below is always a valid absolute URL.
+const RAW_BACKEND_URL = process.env.BACKEND_URL ?? "http://127.0.0.1:8000";
+const BACKEND_URL = /^https?:\/\//.test(RAW_BACKEND_URL) ? RAW_BACKEND_URL : `http://${RAW_BACKEND_URL}`;
 const isDev = process.env.NODE_ENV !== "production";
 
 const csp = [

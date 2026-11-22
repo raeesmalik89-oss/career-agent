@@ -6,6 +6,14 @@ It never invents experience, never bypasses CAPTCHA/MFA, never automates platfor
 
 The design is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
+## Deploy it free (open in your browser)
+
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/raeesmalik89-oss/career-agent)
+
+Click the button (or point a Render Blueprint at this repo). It stands up the backend, the
+dashboard and a PostgreSQL database on Render's **free** tier and gives you a public URL to open.
+You only paste one generated secret. Full walkthrough: **[DEPLOY.md](DEPLOY.md)**.
+
 ## Milestone status
 
 | # | Milestone | Status |
