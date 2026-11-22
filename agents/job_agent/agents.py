@@ -33,6 +33,9 @@ FAMILY_QUERIES: dict[str, list[str]] = {
     "ai_platform": ["ai platform", "ai infrastructure"],
     "cloud_ai_infra": ["ai infrastructure"],
     "sre_ai": ["site reliability"],
+    "security_engineer": ["security engineer", "cybersecurity engineer", "information security engineer"],
+    "cloud_security": ["cloud security engineer", "cloud security"],
+    "appsec": ["application security engineer", "appsec engineer", "product security engineer"],
 }
 WIDER_QUERIES = [
     "infrastructure engineer",

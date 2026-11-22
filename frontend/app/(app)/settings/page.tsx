@@ -9,7 +9,7 @@ import { COMPONENT_LABELS, humanize } from "@/lib/format";
 import type { AiStatus } from "@/lib/types";
 import { useApi } from "@/lib/use-api";
 
-const FAMILIES = ["devops", "cloud", "sre", "aiops", "ai_engineer", "ai_platform", "mlops", "devsecops", "kubernetes", "platform", "cloud_ai_infra", "sre_ai"];
+const FAMILIES = ["devops", "cloud", "sre", "aiops", "ai_engineer", "ai_platform", "mlops", "devsecops", "kubernetes", "platform", "cloud_ai_infra", "sre_ai", "security_engineer", "cloud_security", "appsec"];
 const LEVELS = ["intern", "entry", "junior", "mid", "senior", "staff", "principal"];
 
 // Only the fields this page edits are typed; everything else is sent back unchanged.
