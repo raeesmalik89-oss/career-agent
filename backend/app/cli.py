@@ -10,6 +10,7 @@ python -m app.cli match-jobs --email E [--out F]   re-score current jobs against
 
 import argparse
 import getpass
+import os
 import secrets
 import sys
 
@@ -41,6 +42,45 @@ def seed() -> None:
         skills = sync_taxonomy(db, get_taxonomy())
         db.commit()
     print(f"seeded {added} new job sources; {len(skills)} skills in taxonomy")
+    bootstrap_owner()
+
+
+def bootstrap_owner() -> None:
+    """Create the first owner account from environment variables, once, on startup.
+
+    This exists so a host without shell access (e.g. Render's free plan) can still create the
+    initial login: set BOOTSTRAP_OWNER_EMAIL and BOOTSTRAP_OWNER_PASSWORD (and optionally
+    BOOTSTRAP_OWNER_NAME) and deploy. It runs from `seed`, which the container runs on every boot,
+    and is idempotent: it does nothing if the variables are unset or the user already exists, so it
+    is safe to leave the variables in place. Remove them (or just the password) once you have logged
+    in if you prefer not to keep the credential in the environment.
+    """
+    email = os.environ.get("BOOTSTRAP_OWNER_EMAIL", "").strip().lower()
+    password = os.environ.get("BOOTSTRAP_OWNER_PASSWORD", "")
+    if not email or not password:
+        return
+    if len(password) < MIN_PASSWORD:
+        print(f"bootstrap owner skipped: BOOTSTRAP_OWNER_PASSWORD must be at least {MIN_PASSWORD} characters")
+        return
+    name = os.environ.get("BOOTSTRAP_OWNER_NAME", "").strip() or email.split("@")[0]
+    with get_sessionmaker()() as db:
+        if db.scalars(select(User).where(User.email == email)).first():
+            return  # already created on an earlier boot
+        user = User(email=email, display_name=name, role=Role.owner, password_hash=hash_password(password))
+        db.add(user)
+        db.flush()
+        settings_service.save(db, user.id, UserSettings(), actor=Actor.system)
+        audit.record(
+            db,
+            action="user.create_owner",
+            actor=Actor.system,
+            actor_detail="bootstrap",
+            user_id=user.id,
+            entity_type="users",
+            entity_id=user.id,
+        )
+        db.commit()
+    print(f"bootstrap owner created: {email}")
 
 
 def set_password(email: str) -> None:
