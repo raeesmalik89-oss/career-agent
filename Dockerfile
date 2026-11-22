@@ -11,7 +11,9 @@ COPY pyproject.toml uv.lock ./
 RUN --mount=type=cache,target=/root/.cache/uv uv sync --frozen --no-dev --no-install-project
 
 FROM base AS runtime
-RUN groupadd -r app && useradd -r -g app -d /app app
+# Patch OS packages that have a fix available (e.g. zlib), then create the unprivileged runtime user.
+RUN apt-get update && apt-get upgrade -y && rm -rf /var/lib/apt/lists/* \
+    && groupadd -r app && useradd -r -g app -d /app app
 COPY --from=deps /app/.venv /app/.venv
 COPY alembic.ini ./
 COPY backend ./backend
